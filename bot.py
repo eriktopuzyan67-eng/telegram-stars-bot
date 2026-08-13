@@ -5,7 +5,9 @@ from telebot import types
 # НАСТРОЙКИ
 # =========================
 
-BOT_TOKEN = import os
+import os
+import telebot
+from telebot import types
 
 BOT_TOKEN = os.environ["8642114423:AAGJQXU3rgvgIVdxYX_E0ZXF0ngTY_AJ7CY"]
 
