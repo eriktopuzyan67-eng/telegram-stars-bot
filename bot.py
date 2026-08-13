@@ -8,30 +8,44 @@ from telebot import types
 
 
 # =========================================================
-# RENDER WEB SERVER
+# RENDER
 # =========================================================
 
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header(
+            "Content-Type",
+            "text/plain; charset=utf-8"
+        )
         self.end_headers()
-        self.wfile.write(b"SELL STARS RT is running")
+        self.wfile.write(
+            b"SELL STARS RT is running"
+        )
 
     def log_message(self, format, *args):
         pass
 
 
 def run_server():
-    port = int(os.environ.get("PORT", "10000"))
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            "10000"
+        )
+    )
 
     server = HTTPServer(
         ("0.0.0.0", port),
         Handler
     )
 
-    print("Web server started on port", port)
+    print(
+        "Web server started on port",
+        port
+    )
 
     server.serve_forever()
 
@@ -50,28 +64,31 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
     raise RuntimeError(
-        "BOT_TOKEN не найден в Environment Variables"
+        "BOT_TOKEN не найден в Render Environment Variables"
     )
 
 
 ADMIN_ID = 6189064599
 
 
-# Эти две переменные можно добавить в Render.
-# Если их нет, будут использованы значения ниже.
+# =========================================================
+# РЕКВИЗИТЫ
+# =========================================================
 
-SBER_DETAILS = os.environ.get(
-    "SBER_DETAILS",
-    "Укажите реквизиты Сбербанка"
+SBER_DETAILS = (
+    "2202208584208103 "
+    "Эрик Ваанович Т."
 )
 
-SBP_DETAILS = os.environ.get(
-    "SBP_DETAILS",
-    "Укажите реквизиты СБП"
+SBP_DETAILS = (
+    "2202208584208103 "
+    "Эрик Ваанович Т."
 )
 
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(
+    BOT_TOKEN
+)
 
 
 # =========================================================
@@ -116,17 +133,19 @@ USERS_FILE = "users.json"
 def load_users():
 
     try:
+
         with open(
             USERS_FILE,
             "r",
             encoding="utf-8"
         ) as file:
 
-            data = json.load(file)
-
-            return set(data)
+            return set(
+                json.load(file)
+            )
 
     except Exception:
+
         return set()
 
 
@@ -152,7 +171,7 @@ def save_users():
     except Exception as error:
 
         print(
-            "Ошибка сохранения users.json:",
+            "Ошибка users.json:",
             error
         )
 
@@ -248,7 +267,9 @@ def order_description(order):
 # START
 # =========================================================
 
-@bot.message_handler(commands=["start"])
+@bot.message_handler(
+    commands=["start"]
+)
 def start(message):
 
     register_user(
@@ -334,7 +355,9 @@ def stars(call):
 # =========================================================
 
 @bot.callback_query_handler(
-    func=lambda call: call.data.startswith("amount_")
+    func=lambda call: call.data.startswith(
+        "amount_"
+    )
 )
 def choose_amount(call):
 
@@ -351,7 +374,7 @@ def choose_amount(call):
 
         bot.answer_callback_query(
             call.id,
-            "Ошибка количества"
+            "❌ Ошибка количества"
         )
 
         return
@@ -360,12 +383,14 @@ def choose_amount(call):
 
         bot.answer_callback_query(
             call.id,
-            "Такого количества нет"
+            "❌ Такого количества нет"
         )
 
         return
 
-    orders[call.from_user.id] = {
+    orders[
+        call.from_user.id
+    ] = {
         "product": "Stars",
         "amount": amount,
         "price": PRICES[amount]
@@ -404,16 +429,16 @@ def custom_stars(call):
         )
     )
 
-    message = bot.send_message(
+    msg = bot.send_message(
         call.message.chat.id,
         "✏️ Напишите количество Stars.\n\n"
-        "Минимум: 50 Stars\n"
-        "Цена: 1,40 ₽ за 1 Star.",
+        "Минимум — 50 Stars.\n"
+        "Цена — 1,40 ₽ за 1 Star.",
         reply_markup=markup
     )
 
     bot.register_next_step_handler(
-        message,
+        msg,
         custom_stars_amount
     )
 
@@ -428,7 +453,7 @@ def custom_stars_amount(message):
 
         bot.send_message(
             message.chat.id,
-            "❌ Введите число."
+            "❌ Введите количество числом."
         )
 
         return
@@ -452,7 +477,7 @@ def custom_stars_amount(message):
 
         bot.send_message(
             message.chat.id,
-            "❌ Минимум — 50 Stars."
+            "❌ Минимальный заказ — 50 Stars."
         )
 
         return
@@ -461,7 +486,9 @@ def custom_stars_amount(message):
         amount * 1.40
     )
 
-    orders[message.from_user.id] = {
+    orders[
+        message.from_user.id
+    ] = {
         "product": "Stars",
         "amount": amount,
         "price": price
@@ -547,7 +574,9 @@ def choose_premium(call):
         )[1]
     )
 
-    orders[call.from_user.id] = {
+    orders[
+        call.from_user.id
+    ] = {
         "product": "Premium",
         "months": months,
         "price": PREMIUM_PRICES[months]
@@ -654,15 +683,15 @@ def recipient_self(call):
 
         bot.answer_callback_query(
             call.id,
-            "Заказ не найден"
+            "❌ Заказ не найден"
         )
 
         return
 
-    orders[user_id]["recipient"] = (
-        get_username(
-            call.from_user
-        )
+    orders[user_id][
+        "recipient"
+    ] = get_username(
+        call.from_user
     )
 
     bot.answer_callback_query(
@@ -698,14 +727,15 @@ def recipient_other(call):
         )
     )
 
-    message = bot.send_message(
+    msg = bot.send_message(
         call.message.chat.id,
-        "👤 Напишите @username пользователя:",
+        "👤 Напишите @username пользователя,\n"
+        "которому нужно оформить заказ.",
         reply_markup=markup
     )
 
     bot.register_next_step_handler(
-        message,
+        msg,
         save_recipient
     )
 
@@ -738,7 +768,9 @@ def save_recipient(message):
 
         return
 
-    orders[user_id]["recipient"] = recipient
+    orders[user_id][
+        "recipient"
+    ] = recipient
 
     show_payment(
         message.chat.id,
@@ -748,7 +780,7 @@ def save_recipient(message):
 
 
 # =========================================================
-# НАЗАД ОТ ПОЛУЧАТЕЛЯ
+# НАЗАД К ПОЛУЧАТЕЛЮ
 # =========================================================
 
 @bot.callback_query_handler(
@@ -853,12 +885,14 @@ def pay_sber(call):
 
         bot.answer_callback_query(
             call.id,
-            "Заказ не найден"
+            "❌ Заказ не найден"
         )
 
         return
 
-    order["payment"] = "Сбербанк"
+    order[
+        "payment"
+    ] = "Сбербанк"
 
     markup = types.InlineKeyboardMarkup(
         row_width=1
@@ -921,12 +955,14 @@ def pay_sbp(call):
 
         bot.answer_callback_query(
             call.id,
-            "Заказ не найден"
+            "❌ Заказ не найден"
         )
 
         return
 
-    order["payment"] = "СБП"
+    order[
+        "payment"
+    ] = "СБП"
 
     markup = types.InlineKeyboardMarkup(
         row_width=1
@@ -1005,7 +1041,7 @@ def paid(call):
 
         bot.answer_callback_query(
             call.id,
-            "Заказ не найден"
+            "❌ Заказ не найден"
         )
 
         return
@@ -1016,12 +1052,14 @@ def paid(call):
 
         bot.answer_callback_query(
             call.id,
-            "Сначала выберите способ оплаты"
+            "Сначала выберите оплату"
         )
 
         return
 
-    order["waiting_receipt"] = True
+    order[
+        "waiting_receipt"
+    ] = True
 
     bot.answer_callback_query(
         call.id
@@ -1029,15 +1067,14 @@ def paid(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📸 Отправьте сюда чек "
-        "или скриншот оплаты.\n\n"
-        "⏳ После этого администратор "
-        "проверит платёж."
+        "📸 Теперь отправьте сюда "
+        "чек или скриншот оплаты.\n\n"
+        "⏳ Администратор проверит платёж."
     )
 
 
 # =========================================================
-# ПОЛУЧЕНИЕ ЧЕКА
+# ЧЕК
 # =========================================================
 
 @bot.message_handler(
@@ -1051,22 +1088,4 @@ def receipt_photo(message):
         user_id
     )
 
-    if user_id not in orders:
-
-        bot.reply_to(
-            message,
-            "❌ Сначала создайте заказ."
-        )
-
-        return
-
-    order = orders[user_id]
-
-    if not order.get(
-        "waiting_receipt",
-        False
-    ):
-
-        bot.reply_to(
-            message,
-   
+    if user_id not in o
