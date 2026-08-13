@@ -5,6 +5,13 @@ from telebot import types
 # НАСТРОЙКИ
 # =========================
 
+import telebot
+from telebot import types
+
+# =========================
+# НАСТРОЙКИ
+# =========================
+
 import os
 import telebot
 from telebot import types
