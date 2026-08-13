@@ -996,39 +996,309 @@ def receipt_photo(message):
 def approve(call):
 
     if call.from_user.id != ADMIN_ID:
-
         bot.answer_callback_query(
             call.id,
             "⛔ Нет доступа"
         )
-
         return
 
     try:
-
         user_id = int(
-            call.data.split(
-                "_",
-                1
-            )[1]
+            call.data.split("_", 1)[1]
         )
-
     except (ValueError, IndexError):
-
         bot.answer_callback_query(
             call.id,
             "❌ Ошибка ID"
         )
-
         return
 
     if user_id not in orders:
-
         bot.answer_callback_query(
             call.id,
             "❌ Заказ не найден"
         )
-
         return
 
-    order = orders[
+    order = orders[user_id]
+    order["confirmed"] = True
+
+    bot.answer_callback_query(
+        call.id,
+        "✅ Оплата подтверждена"
+    )
+
+    markup = types.InlineKeyboardMarkup()
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "📦 Заказ выполнен",
+            callback_data="done_" + str(user_id)
+        )
+    )
+
+    try:
+        bot.edit_message_reply_markup(
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+    except Exception:
+        pass
+
+    bot.send_message(
+        user_id,
+        "✅ ОПЛАТА ПОДТВЕРЖДЕНА!\n\n"
+        + order_text(order)
+        + "\n\n"
+        "📦 Заказ передан в обработку."
+    )
+
+
+# =========================================================
+# АДМИН — ОТКЛОНИТЬ
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("reject_")
+)
+def reject(call):
+
+    if call.from_user.id != ADMIN_ID:
+        bot.answer_callback_query(
+            call.id,
+            "⛔ Нет доступа"
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.split("_", 1)[1]
+        )
+    except (ValueError, IndexError):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Ошибка ID"
+        )
+        return
+
+    if user_id not in orders:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден"
+        )
+        return
+
+    bot.answer_callback_query(
+        call.id,
+        "❌ Чек отклонён"
+    )
+
+    bot.send_message(
+        user_id,
+        "❌ Ваш платёж не был подтверждён.\n\n"
+        "Обратитесь в поддержку."
+    )
+
+
+# =========================================================
+# АДМИН — ЗАКАЗ ВЫПОЛНЕН
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data.startswith("done_")
+)
+def done(call):
+
+    if call.from_user.id != ADMIN_ID:
+        bot.answer_callback_query(
+            call.id,
+            "⛔ Нет доступа"
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.split("_", 1)[1]
+        )
+    except (ValueError, IndexError):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Ошибка ID"
+        )
+        return
+
+    if user_id not in orders:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден"
+        )
+        return
+
+    order = orders[user_id]
+    order["completed"] = True
+
+    bot.answer_callback_query(
+        call.id,
+        "📦 Заказ выполнен"
+    )
+
+    bot.send_message(
+        user_id,
+        "🎉 ЗАКАЗ ВЫПОЛНЕН!\n\n"
+        + order_text(order)
+        + "\n\n"
+        "Спасибо за покупку ❤️"
+    )
+
+
+# =========================================================
+# ПОДДЕРЖКА
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "support"
+)
+def support(call):
+
+    bot.answer_callback_query(call.id)
+
+    markup = types.InlineKeyboardMarkup()
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="home"
+        )
+    )
+
+    edit_message(
+        call,
+        "💬 ПОДДЕРЖКА\n\n"
+        "Если у вас проблема с заказом, "
+        "обратитесь к администратору.\n\n"
+        "🆔 Ваш ID: "
+        + str(call.from_user.id),
+        markup
+    )
+
+
+# =========================================================
+# ГЛАВНОЕ МЕНЮ
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "home"
+)
+def home(call):
+
+    bot.answer_callback_query(call.id)
+
+    edit_message(
+        call,
+        "🏠 Главное меню:",
+        main_menu(call.from_user.id)
+    )
+
+
+# =========================================================
+# РАССЫЛКА
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda call: call.data == "broadcast"
+)
+def broadcast(call):
+
+    if call.from_user.id != ADMIN_ID:
+        bot.answer_callback_query(
+            call.id,
+            "⛔ Нет доступа"
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    message = bot.send_message(
+        call.message.chat.id,
+        "📢 Напишите текст рассылки:"
+    )
+
+    bot.register_next_step_handler(
+        message,
+        broadcast_send
+    )
+
+
+def broadcast_send(message):
+
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    if not message.text:
+        bot.send_message(
+            message.chat.id,
+            "❌ Нужен текст."
+        )
+        return
+
+    success = 0
+    failed = 0
+
+    for user_id in list(users):
+        try:
+            bot.send_message(
+                user_id,
+                message.text
+            )
+            success += 1
+        except Exception as error:
+            failed += 1
+            print(
+                "Ошибка рассылки:",
+                user_id,
+                error
+            )
+
+    bot.send_message(
+        message.chat.id,
+        "📢 Рассылка завершена!\n\n"
+        "✅ Отправлено: "
+        + str(success)
+        + "\n"
+        "❌ Ошибок: "
+        + str(failed)
+    )
+
+
+# =========================================================
+# ОБЫЧНЫЙ ТЕКСТ
+# =========================================================
+
+@bot.message_handler(
+    content_types=["text"]
+)
+def text_handler(message):
+
+    add_user(message.from_user.id)
+
+    bot.send_message(
+        message.chat.id,
+        "🏠 Используйте меню:",
+        reply_markup=main_menu(
+            message.from_user.id
+        )
+    )
+
+
+# =========================================================
+# ЗАПУСК
+# =========================================================
+
+print("SELL STARS RT: BOT STARTING")
+
+bot.infinity_polling(
+    skip_pending=True,
+    timeout=30,
+    long_polling_timeout=30
+    )
