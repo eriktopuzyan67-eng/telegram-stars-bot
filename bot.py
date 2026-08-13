@@ -12,8 +12,10 @@ from telebot import types
 # =========================================================
 
 class Handler(BaseHTTPRequestHandler):
+
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
         self.wfile.write(b"SELL STARS RT is running")
 
@@ -22,7 +24,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run_server():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", "10000"))
     server = HTTPServer(("0.0.0.0", port), Handler)
     server.serve_forever()
 
@@ -37,7 +39,12 @@ threading.Thread(
 # НАСТРОЙКИ
 # =========================================================
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+if not BOT_TOKEN:
+    raise RuntimeError(
+        "Не задана переменная BOT_TOKEN в Render Environment Variables"
+    )
 
 ADMIN_ID = 6189064599
 
@@ -89,7 +96,10 @@ USERS_FILE = "users.json"
 def load_users():
     try:
         with open(USERS_FILE, "r", encoding="utf-8") as file:
-            return set(json.load(file))
+            data = json.load(file)
+
+        return set(data)
+
     except Exception:
         return set()
 
@@ -100,7 +110,12 @@ users = load_users()
 def save_users():
     try:
         with open(USERS_FILE, "w", encoding="utf-8") as file:
-            json.dump(list(users), file)
+            json.dump(
+                list(users),
+                file,
+                ensure_ascii=False
+            )
+
     except Exception as error:
         print("Ошибка users.json:", error)
 
@@ -110,6 +125,7 @@ def save_users():
 # =========================================================
 
 def get_username(user):
+
     if user.username:
         return "@" + user.username
 
@@ -166,12 +182,14 @@ def order_description(order):
 
         return (
             f"⭐ Stars: {order['amount']}\n"
-            f"🎁 Получатель: {order.get('recipient', 'не указан')}\n"
+            f"🎁 Получатель: "
+            f"{order.get('recipient', 'не указан')}\n"
         )
 
     return (
         f"💎 Premium: {order['months']} мес.\n"
-        f"🎁 Получатель: {order.get('recipient', 'не указан')}\n"
+        f"🎁 Получатель: "
+        f"{order.get('recipient', 'не указан')}\n"
     )
 
 
@@ -195,7 +213,7 @@ def start(message):
         "⭐ Здесь вы можете купить звёзды "
         "по курсу 1,40 ₽ за 1 шт.\n\n"
         "📦 Минимальный заказ — от 50 Stars.\n\n"
-        "💎 Так же продаются Telegram Premium.\n\n"
+        "💎 Также продаются Telegram Premium.\n\n"
         "Выберите нужное действие:"
     )
 
@@ -347,9 +365,7 @@ def custom_stars_amount(message):
 
         return
 
-    price = round(
-        amount * 1.40
-    )
+    price = round(amount * 1.40)
 
     orders[message.from_user.id] = {
         "product": "Stars",
@@ -414,7 +430,7 @@ def premium(call):
 
 
 # =========================================================
-# ВАЖНО: ТОЛЬКО ЧИСЛОВЫЕ PREMIUM CALLBACK
+# PREMIUM CALLBACK
 # =========================================================
 
 @bot.callback_query_handler(
@@ -477,11 +493,8 @@ def show_recipient(
     )
 
     if order["product"] == "Stars":
-
         back_callback = "stars"
-
     else:
-
         back_callback = "premium"
 
     markup.add(
@@ -595,7 +608,6 @@ def save_recipient(message):
     recipient = message.text.strip()
 
     if not recipient.startswith("@"):
-
         recipient = "@" + recipient
 
     user_id = message.from_user.id
@@ -708,7 +720,6 @@ def show_payment(
 def pay_sber(call):
 
     user_id = call.from_user.id
-
     order = orders.get(user_id)
 
     if not order:
@@ -763,7 +774,6 @@ def pay_sber(call):
 def pay_sbp(call):
 
     user_id = call.from_user.id
-
     order = orders.get(user_id)
 
     if not order:
@@ -854,8 +864,7 @@ def paid(call):
         call.message.chat.id,
         "📸 Теперь отправьте сюда чек "
         "или скриншот оплаты.\n\n"
-        "⏳ Ожидайте проверки платежа.\n"
-        "Это займет не больше 15 минут."
+        "⏳ Ожидайте проверки платежа."
     )
 
 
@@ -922,8 +931,7 @@ def receipt_photo(message):
     bot.reply_to(
         message,
         "✅ Чек отправлен администратору!\n\n"
-        "⏳ Ожидайте проверки платежа.\n"
-        "Это займет не больше 15 минут."
+        "⏳ Ожидайте проверки платежа."
     )
 
 
@@ -961,15 +969,4 @@ def approve(call):
         return
 
     order["payment_confirmed"] = True
-
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "📦 Заказ выполнен",
-            callback_data=f"done_{user_id}"
-        )
-    )
-
-    bot.send_message(
-     
+    order["wait
