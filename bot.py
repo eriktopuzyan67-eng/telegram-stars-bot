@@ -12,11 +12,10 @@ from telebot import types
 # НАСТРОЙКИ
 # =========================
 
-import os
 import telebot
 from telebot import types
 
-BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_TOKEN = "8642114423:AAGJQXU3rgvgIVdxYX_E0ZXF0ngTY_AJ7CY"
 
 # Твой Telegram ID
 ADMIN_ID = 6189064599
