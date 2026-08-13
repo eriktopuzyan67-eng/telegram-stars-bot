@@ -1,4 +1,5 @@
 import os
+import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -76,6 +77,32 @@ orders = {}
 
 
 # =========================
+# ПОЛЬЗОВАТЕЛИ
+# =========================
+
+USERS_FILE = "users.json"
+
+
+def load_users():
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as file:
+            return set(json.load(file))
+    except:
+        return set()
+
+
+users = load_users()
+
+
+def save_users():
+    try:
+        with open(USERS_FILE, "w", encoding="utf-8") as file:
+            json.dump(list(users), file)
+    except Exception as e:
+        print("Ошибка сохранения пользователей:", e)
+
+
+# =========================
 # ГЛАВНОЕ МЕНЮ
 # =========================
 
@@ -112,13 +139,16 @@ def main_menu():
 
 @bot.message_handler(commands=["start"])
 def start(message):
+
+    users.add(message.from_user.id)
+    save_users()
+
     bot.send_message(
         message.chat.id,
         "✨ Добро пожаловать в бота SELL STARS RT!\n\n"
-        "⭐ Здесь вы можете купить звёзды "
-        "по курсу 1,40 ₽ за 1 шт.\n\n"
-        "📦 Минимальный заказ — от 50 Stars.\n"
-        "💎 Так же продаётся Telegram Premium.\n\n"
+        "⭐ Здесь вы можете купить звёзды по курсу 1,40 ₽ за 1 шт.\n"
+        "📦 Минимальный заказ — от 50 Stars.\n\n"
+        "💎 Так же продаются Telegram Premium.\n\n"
         "Выберите нужный товар:",
         reply_markup=main_menu()
     )
@@ -155,6 +185,8 @@ def stars(call):
         )
     )
 
+    bot.answer_callback_query(call.id)
+
     bot.edit_message_text(
         "⭐ Выберите количество Stars:",
         call.message.chat.id,
@@ -172,28 +204,32 @@ def custom_stars(call):
 
     bot.answer_callback_query(call.id)
 
-    bot.send_message(
+    msg = bot.send_message(
         call.message.chat.id,
         "✏️ Напишите количество Stars.\n\n"
         "Минимальный заказ — 50 Stars.\n"
-        "Цена — 1,40 ₽ за 1 Star."
+        "Цена — 1,40 ₽ за 1 Star.\n\n"
+        "Для отмены напишите /start"
     )
 
     bot.register_next_step_handler(
-        call.message,
+        msg,
         process_custom_stars
     )
 
 
 def process_custom_stars(message):
 
+    if message.text == "/start":
+        start(message)
+        return
+
     try:
         amount = int(message.text.strip())
     except ValueError:
         bot.send_message(
             message.chat.id,
-            "❌ Введите количество Stars числом.\n"
-            "Например: 250"
+            "❌ Введите количество Stars числом."
         )
         return
 
@@ -212,7 +248,10 @@ def process_custom_stars(message):
         "price": price
     }
 
-    choose_recipient(message.chat.id, message.from_user.id)
+    choose_recipient(
+        message.chat.id,
+        message.from_user.id
+    )
 
 
 # =========================
@@ -241,7 +280,7 @@ def choose_amount(call):
 
 
 # =========================
-# ВЫБОР ПОЛУЧАТЕЛЯ STARS
+# ПОЛУЧАТЕЛЬ STARS
 # =========================
 
 def choose_recipient(chat_id, user_id, message_id=None):
@@ -259,6 +298,13 @@ def choose_recipient(chat_id, user_id, message_id=None):
         types.InlineKeyboardButton(
             "🎁 Другому",
             callback_data="recipient_other"
+        )
+    )
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="stars"
         )
     )
 
@@ -283,20 +329,13 @@ def choose_recipient(chat_id, user_id, message_id=None):
         )
 
 
-# =========================
-# STARS СЕБЕ
-# =========================
-
 @bot.callback_query_handler(func=lambda call: call.data == "recipient_self")
 def recipient_self(call):
 
     user_id = call.from_user.id
 
     if user_id not in orders:
-        bot.answer_callback_query(
-            call.id,
-            "Заказ не найден"
-        )
+        bot.answer_callback_query(call.id, "Заказ не найден")
         return
 
     username = (
@@ -316,16 +355,12 @@ def recipient_self(call):
     )
 
 
-# =========================
-# STARS ДРУГОМУ
-# =========================
-
 @bot.callback_query_handler(func=lambda call: call.data == "recipient_other")
 def recipient_other(call):
 
     bot.answer_callback_query(call.id)
 
-    bot.send_message(
+    msg = bot.send_message(
         call.message.chat.id,
         "👤 Напишите @username пользователя,\n"
         "которому отправить Stars.\n\n"
@@ -333,12 +368,16 @@ def recipient_other(call):
     )
 
     bot.register_next_step_handler(
-        call.message,
+        msg,
         process_other_recipient
     )
 
 
 def process_other_recipient(message):
+
+    if message.text == "/start":
+        start(message)
+        return
 
     username = message.text.strip()
 
@@ -400,6 +439,8 @@ def premium(call):
         )
     )
 
+    bot.answer_callback_query(call.id)
+
     bot.edit_message_text(
         "💎 Выберите срок Telegram Premium:",
         call.message.chat.id,
@@ -407,10 +448,6 @@ def premium(call):
         reply_markup=markup
     )
 
-
-# =========================
-# ВЫБОР PREMIUM
-# =========================
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("premium_"))
 def choose_premium(call):
@@ -459,20 +496,13 @@ def choose_premium(call):
     )
 
 
-# =========================
-# PREMIUM СЕБЕ
-# =========================
-
 @bot.callback_query_handler(func=lambda call: call.data == "premium_self")
 def premium_self(call):
 
     user_id = call.from_user.id
 
     if user_id not in orders:
-        bot.answer_callback_query(
-            call.id,
-            "Заказ не найден"
-        )
+        bot.answer_callback_query(call.id, "Заказ не найден")
         return
 
     username = (
@@ -492,16 +522,12 @@ def premium_self(call):
     )
 
 
-# =========================
-# PREMIUM ДРУГОМУ
-# =========================
-
 @bot.callback_query_handler(func=lambda call: call.data == "premium_other")
 def premium_other(call):
 
     bot.answer_callback_query(call.id)
 
-    bot.send_message(
+    msg = bot.send_message(
         call.message.chat.id,
         "👤 Напишите @username пользователя,\n"
         "которому оформить Premium.\n\n"
@@ -509,12 +535,16 @@ def premium_other(call):
     )
 
     bot.register_next_step_handler(
-        call.message,
+        msg,
         process_premium_other
     )
 
 
 def process_premium_other(message):
+
+    if message.text == "/start":
+        start(message)
+        return
 
     username = message.text.strip()
 
@@ -540,6 +570,24 @@ def process_premium_other(message):
 
 
 # =========================
+# ИНФОРМАЦИЯ О ЗАКАЗЕ
+# =========================
+
+def order_info(order):
+
+    if order["product"] == "Stars":
+        return (
+            f"⭐ Stars: {order['amount']}\n"
+            f"🎁 Получатель: {order['recipient']}\n"
+        )
+
+    return (
+        f"💎 Premium: {order['months']} мес.\n"
+        f"🎁 Получатель: {order['recipient']}\n"
+    )
+
+
+# =========================
 # ОПЛАТА
 # =========================
 
@@ -548,10 +596,7 @@ def payment_menu(chat_id, message_id, user_id):
     order = orders.get(user_id)
 
     if not order:
-        bot.send_message(
-            chat_id,
-            "❌ Заказ не найден."
-        )
+        bot.send_message(chat_id, "❌ Заказ не найден.")
         return
 
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -570,21 +615,15 @@ def payment_menu(chat_id, message_id, user_id):
         )
     )
 
-    product_text = ""
-
-    if order["product"] == "Stars":
-        product_text = (
-            f"⭐ Stars: {order['amount']}\n"
-            f"🎁 Получатель: {order['recipient']}\n"
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="recipient_back"
         )
-    else:
-        product_text = (
-            f"💎 Premium: {order['months']} мес.\n"
-            f"🎁 Получатель: {order['recipient']}\n"
-        )
+    )
 
     text = (
-        f"{product_text}"
+        f"{order_info(order)}"
         f"💰 Сумма: {order['price']} ₽\n\n"
         "Выберите способ оплаты:"
     )
@@ -605,6 +644,66 @@ def payment_menu(chat_id, message_id, user_id):
 
 
 # =========================
+# НАЗАД
+# =========================
+
+@bot.callback_query_handler(func=lambda call: call.data == "recipient_back")
+def recipient_back(call):
+
+    user_id = call.from_user.id
+
+    if user_id not in orders:
+        bot.answer_callback_query(call.id, "Заказ не найден")
+        return
+
+    bot.answer_callback_query(call.id)
+
+    order = orders[user_id]
+
+    if order["product"] == "Stars":
+
+        choose_recipient(
+            call.message.chat.id,
+            user_id,
+            call.message.message_id
+        )
+
+    else:
+
+        markup = types.InlineKeyboardMarkup(row_width=1)
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "👤 Себе",
+                callback_data="premium_self"
+            )
+        )
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "🎁 Другому",
+                callback_data="premium_other"
+            )
+        )
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "⬅️ Назад",
+                callback_data="premium"
+            )
+        )
+
+        bot.edit_message_text(
+            f"💎 Telegram Premium — {order['months']} мес.\n"
+            f"💰 Сумма: {order['price']} ₽\n\n"
+            "Кому оформить Premium?",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+
+
+# =========================
 # СБЕРБАНК
 # =========================
 
@@ -614,13 +713,10 @@ def pay_sber(call):
     order = orders.get(call.from_user.id)
 
     if not order:
-        bot.answer_callback_query(
-            call.id,
-            "Заказ не найден"
-        )
+        bot.answer_callback_query(call.id, "Заказ не найден")
         return
 
-    orders[call.from_user.id]["payment"] = "Сбербанк"
+    order["payment"] = "Сбербанк"
 
     markup = types.InlineKeyboardMarkup()
 
@@ -631,14 +727,13 @@ def pay_sber(call):
         )
     )
 
-    product_text = order_info(order)
+    bot.answer_callback_query(call.id)
 
     bot.edit_message_text(
-        f"🏦 ОПЛАТА СБЕРБАНК\n\n"
-        f"{product_text}"
+        "🏦 ОПЛАТА СБЕРБАНК\n\n"
+        f"{order_info(order)}"
         f"💰 Сумма: {order['price']} ₽\n\n"
-        f"Реквизиты:\n"
-        f"{SBER_DETAILS}\n\n"
+        f"Реквизиты:\n{SBER_DETAILS}\n\n"
         "После оплаты нажми «Я оплатил» "
         "и отправь чек.",
         call.message.chat.id,
@@ -657,13 +752,10 @@ def pay_sbp(call):
     order = orders.get(call.from_user.id)
 
     if not order:
-        bot.answer_callback_query(
-            call.id,
-            "Заказ не найден"
-        )
+        bot.answer_callback_query(call.id, "Заказ не найден")
         return
 
-    orders[call.from_user.id]["payment"] = "СБП"
+    order["payment"] = "СБП"
 
     markup = types.InlineKeyboardMarkup()
 
@@ -674,33 +766,18 @@ def pay_sbp(call):
         )
     )
 
-    product_text = order_info(order)
+    bot.answer_callback_query(call.id)
 
     bot.edit_message_text(
-        f"📱 ОПЛАТА СБП\n\n"
-        f"{product_text}"
+        "📱 ОПЛАТА СБП\n\n"
+        f"{order_info(order)}"
         f"💰 Сумма: {order['price']} ₽\n\n"
-        f"Реквизиты:\n"
-        f"{SBP_DETAILS}\n\n"
+        f"Реквизиты:\n{SBP_DETAILS}\n\n"
         "После оплаты нажми «Я оплатил» "
         "и отправь чек.",
         call.message.chat.id,
         call.message.message_id,
         reply_markup=markup
-    )
-
-
-def order_info(order):
-
-    if order["product"] == "Stars":
-        return (
-            f"⭐ Stars: {order['amount']}\n"
-            f"🎁 Получатель: {order['recipient']}\n"
-        )
-
-    return (
-        f"💎 Premium: {order['months']} мес.\n"
-        f"🎁 Получатель: {order['recipient']}\n"
     )
 
 
@@ -712,10 +789,7 @@ def order_info(order):
 def paid(call):
 
     if call.from_user.id not in orders:
-        bot.answer_callback_query(
-            call.id,
-            "Заказ не найден"
-        )
+        bot.answer_callback_query(call.id, "Заказ не найден")
         return
 
     orders[call.from_user.id]["waiting_receipt"] = True
@@ -724,8 +798,7 @@ def paid(call):
 
     bot.send_message(
         call.message.chat.id,
-        "📸 Теперь отправь сюда чек или скриншот оплаты.\n\n"
-        "После проверки администратор подтвердит заказ."
+        "📸 Теперь отправьте сюда чек или скриншот оплаты."
     )
 
 
@@ -741,7 +814,7 @@ def receipt_photo(message):
     if user_id not in orders:
         bot.reply_to(
             message,
-            "❌ Сначала создай заказ через /start."
+            "❌ Сначала создайте заказ через /start."
         )
         return
 
@@ -750,7 +823,7 @@ def receipt_photo(message):
     if not order.get("waiting_receipt"):
         bot.reply_to(
             message,
-            "❌ Сначала нажми «Я оплатил»."
+            "❌ Сначала нажмите «Я оплатил»."
         )
         return
 
@@ -791,13 +864,14 @@ def receipt_photo(message):
 
     bot.reply_to(
         message,
-        "✅ Чек отправлен администратору.\n\n"
-        "Ожидай проверки оплаты."
+        "✅ Чек отправлен администратору!\n\n"
+        "⏳ Ожидайте проверки платежа.\n"
+        "Это займет не больше 15 минут."
     )
 
 
 # =========================
-# ПОДТВЕРЖДЕНИЕ
+# ПОДТВЕРЖДЕНИЕ ОПЛАТЫ
 # =========================
 
 @bot.callback_query_handler(
@@ -813,6 +887,7 @@ def approve(call):
         return
 
     user_id = int(call.data.split("_")[1])
+
     order = orders.get(user_id)
 
     if not order:
@@ -822,106 +897,57 @@ def approve(call):
         )
         return
 
+    order["payment_confirmed"] = True
+
+    markup = types.InlineKeyboardMarkup()
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "📦 Заказ выполнен",
+            callback_data=f"done_{user_id}"
+        )
+    )
+
     bot.send_message(
         user_id,
         "✅ ОПЛАТА ПОДТВЕРЖДЕНА!\n\n"
         f"{order_info(order)}"
         f"💰 Сумма: {order['price']} ₽\n\n"
-        "Спасибо за покупку!\n\n"
-        "⏳ Заказ будет обработан администратором."
+        "⏳ Заказ обрабатывается."
     )
+
+    try:
+        bot.edit_message_caption(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            caption=(
+                call.message.caption +
+                "\n\n"
+                "✅ ОПЛАТА ПОДТВЕРЖДЕНА\n"
+                "⏳ Ожидается выполнение заказа."
+            ),
+            reply_markup=markup
+        )
+    except Exception as e:
+        print("Ошибка изменения чека:", e)
 
     bot.answer_callback_query(
         call.id,
-        "Заказ подтверждён"
+        "Оплата подтверждена"
     )
-
-    bot.edit_message_reply_markup(
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=None
-    )
-
-    del orders[user_id]
 
 
 # =========================
-# ОТКЛОНЕНИЕ
+# ЗАКАЗ ВЫПОЛНЕН
 # =========================
 
 @bot.callback_query_handler(
-    func=lambda call: call.data.startswith("reject_")
+    func=lambda call: call.data.startswith("done_")
 )
-def reject(call):
+def order_done(call):
 
     if call.from_user.id != ADMIN_ID:
         bot.answer_callback_query(
             call.id,
             "⛔ Нет доступа"
-        )
-        return
-
-    user_id = int(call.data.split("_")[1])
-
-    bot.send_message(
-        user_id,
-        "❌ Оплата не подтверждена.\n\n"
-        "Проверьте чек и обратитесь в поддержку."
-    )
-
-    bot.answer_callback_query(
-        call.id,
-        "Заказ отклонён"
-    )
-
-    bot.edit_message_reply_markup(
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=None
-    )
-
-    if user_id in orders:
-        del orders[user_id]
-
-
-# =========================
-# ПОДДЕРЖКА
-# =========================
-
-@bot.callback_query_handler(
-    func=lambda call: call.data == "support"
-)
-def support(call):
-
-    bot.answer_callback_query(call.id)
-
-    bot.send_message(
-        call.message.chat.id,
-        "💬 Если у вас возникли вопросы пишите @Ireqhat4"
-    )
-
-
-# =========================
-# НАЗАД
-# =========================
-
-@bot.callback_query_handler(
-    func=lambda call: call.data == "back"
-)
-def back(call):
-
-    bot.edit_message_text(
-        "✨ Главное меню:",
-        call.message.chat.id,
-        call.message.message_id,
-        reply_markup=main_menu()
-    )
-
-
-# =========================
-# ЗАПУСК
-# =========================
-
-print("🤖 Бот запущен!")
-
-bot.infinity_polling()
+  
