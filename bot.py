@@ -11,8 +11,8 @@ BOT_TOKEN = "8642114423:AAGJQXU3rgvgIVdxYX_E0ZXF0ngTY_AJ7CY"
 ADMIN_ID = 6189064599
 
 # Реквизиты
-SBER_DETAILS = "2202208584208803 Юрий Ваанович Т."
-SBP_DETAILS = "+79935101914 Юрий Ваанович Т."
+SBER_DETAILS = "2202208584208803 Эрик Ваанович Т."
+SBP_DETAILS = "+79935101914 Эрик Ваанович Т."
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
