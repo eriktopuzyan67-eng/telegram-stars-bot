@@ -1059,17 +1059,60 @@ def pay_sber(call):
     user_id = call.from_user.id
 
     if user_id not in orders:
-
         bot.answer_callback_query(
             call.id,
             "❌ Заказ не найден"
         )
-
         return
 
     order = orders[user_id]
 
     if order.get("expired"):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ отменён"
+        )
+        return
+
+    order["payment"] = "Сбербанк"
+    order["payment_started"] = True
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "✅ Я оплатил",
+            callback_data="paid"
+        )
+    )
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="payment_back"
+        )
+    )
+
+    text = (
+        "🏦 ОПЛАТА СБЕРБАНК\n\n"
+        + order_text(order)
+        + "\n\n"
+        "💳 Реквизиты:\n"
+        + SBER_DETAILS
+        + "\n\n"
+        "После оплаты нажмите «Я оплатил» "
+        "и отправьте чек."
+    )
+
+    bot.answer_callback_query(call.id)
+
+    edit_message(
+        call,
+        text,
+        markup
+    )
+
+
 # =========================================================
 # ЗАПУСК БОТА
 # =========================================================
@@ -1088,4 +1131,3 @@ if __name__ == "__main__":
             print("Ошибка бота:", error)
             import time
             time.sleep(5)
-        
