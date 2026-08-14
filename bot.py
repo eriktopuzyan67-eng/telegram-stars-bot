@@ -16,38 +16,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(200)
-        self.send_header(
-            "Content-Type",
-            "text/plain; charset=utf-8"
-        )
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(
-            b"SELL STARS RT is running"
-        )
+        self.wfile.write(b"SELL STARS RT is running")
 
     def log_message(self, format, *args):
         pass
 
 
 def run_server():
-    port = int(
-        os.environ.get("PORT", "10000")
-    )
-
-    server = HTTPServer(
-        ("0.0.0.0", port),
-        Handler
-    )
-
+    port = int(os.environ.get("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), Handler)
     print("Web server started on port", port)
-
     server.serve_forever()
 
 
-threading.Thread(
-    target=run_server,
-    daemon=True
-).start()
+threading.Thread(target=run_server, daemon=True).start()
 
 
 # =========================================================
@@ -57,30 +41,17 @@ threading.Thread(
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
-    raise RuntimeError(
-        "BOT_TOKEN не найден. Добавь BOT_TOKEN в Render Environment."
-    )
-
+    raise RuntimeError("BOT_TOKEN не найден в Render Environment.")
 
 ADMIN_ID = 6189064599
-
 SUPPORT_USERNAME = "Ireqhat4"
-
 
 # =========================================================
 # РЕКВИЗИТЫ
 # =========================================================
 
-SBER_DETAILS = (
-    "2202208584208103\n"
-    "Эрик Ваанович Т."
-)
-
-SBP_DETAILS = (
-    "2202208584208103\n"
-    "Эрик Ваанович Т."
-)
-
+SBER_DETAILS = "2202208584208103 Эрик Ваанович Т."
+SBP_DETAILS = "2202208584208103 Эрик Ваанович Т."
 
 # =========================================================
 # ФАЙЛЫ
@@ -95,7 +66,6 @@ USERS_FILE = "users.json"
 # =========================================================
 
 DEFAULT_PRICES = {
-
     "star_price": 1.50,
 
     "stars": {
@@ -130,15 +100,11 @@ bot = telebot.TeleBot(
 # =========================================================
 
 orders = {}
-
 users = set()
 
 waiting_receipt = set()
-
 waiting_review = set()
-
 broadcast_waiting = set()
-
 price_waiting = {}
 
 
@@ -147,40 +113,21 @@ price_waiting = {}
 # =========================================================
 
 def save_prices():
-
     try:
-
-        with open(
-            PRICES_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
+        with open(PRICES_FILE, "w", encoding="utf-8") as file:
             json.dump(
                 prices,
                 file,
                 ensure_ascii=False,
                 indent=4
             )
-
     except Exception as error:
-
-        print(
-            "Ошибка сохранения цен:",
-            error
-        )
+        print("Ошибка сохранения цен:", error)
 
 
 def load_prices():
-
     try:
-
-        with open(
-            PRICES_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
+        with open(PRICES_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         result = {
@@ -195,24 +142,16 @@ def load_prices():
         }
 
         for amount, default_price in DEFAULT_PRICES["stars"].items():
-
             result["stars"][amount] = float(
-                data.get(
-                    "stars",
-                    {}
-                ).get(
+                data.get("stars", {}).get(
                     amount,
                     default_price
                 )
             )
 
         for months, default_price in DEFAULT_PRICES["premium"].items():
-
             result["premium"][months] = float(
-                data.get(
-                    "premium",
-                    {}
-                ).get(
+                data.get("premium", {}).get(
                     months,
                     default_price
                 )
@@ -221,7 +160,6 @@ def load_prices():
         return result
 
     except Exception:
-
         data = {
             "star_price": DEFAULT_PRICES["star_price"],
             "stars": DEFAULT_PRICES["stars"].copy(),
@@ -229,26 +167,15 @@ def load_prices():
         }
 
         try:
-
-            with open(
-                PRICES_FILE,
-                "w",
-                encoding="utf-8"
-            ) as file:
-
+            with open(PRICES_FILE, "w", encoding="utf-8") as file:
                 json.dump(
                     data,
                     file,
                     ensure_ascii=False,
                     indent=4
                 )
-
         except Exception as error:
-
-            print(
-                "Ошибка создания prices.json:",
-                error
-            )
+            print("Ошибка создания prices.json:", error)
 
         return data
 
@@ -257,29 +184,21 @@ prices = load_prices()
 
 
 def money(value):
-
     value = float(value)
 
     if value.is_integer():
         return str(int(value))
 
-    return str(
-        round(value, 2)
-    ).replace(".", ",")
+    return str(round(value, 2)).replace(".", ",")
 
 
 def refresh_star_prices():
-
     for amount in prices["stars"]:
-
         try:
-
             prices["stars"][amount] = round(
-                int(amount)
-                * float(prices["star_price"]),
+                int(amount) * float(prices["star_price"]),
                 2
             )
-
         except Exception:
             pass
 
@@ -291,57 +210,32 @@ def refresh_star_prices():
 # =========================================================
 
 def load_users():
-
     global users
 
     try:
-
-        with open(
-            USERS_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
+        with open(USERS_FILE, "r", encoding="utf-8") as file:
             data = json.load(file)
 
-        users = set(
-            int(x)
-            for x in data
-        )
+        users = set(int(x) for x in data)
 
     except Exception:
-
         users = set()
 
 
 def save_users():
-
     try:
-
-        with open(
-            USERS_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
+        with open(USERS_FILE, "w", encoding="utf-8") as file:
             json.dump(
                 list(users),
                 file,
                 ensure_ascii=False
             )
-
     except Exception as error:
-
-        print(
-            "Ошибка users.json:",
-            error
-        )
+        print("Ошибка users.json:", error)
 
 
 def add_user(user_id):
-
     if user_id not in users:
-
         users.add(user_id)
         save_users()
 
@@ -350,11 +244,10 @@ load_users()
 
 
 # =========================================================
-# ВСПОМОГАТЕЛЬНЫЕ
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # =========================================================
 
 def get_username(user):
-
     if user.username:
         return "@" + user.username
 
@@ -362,21 +255,14 @@ def get_username(user):
 
 
 def is_admin(user_id):
-
     return user_id == ADMIN_ID
 
 
 def order_text(order):
 
     if order["product"] == "Stars":
-
-        product = (
-            "⭐ Stars: "
-            + str(order["amount"])
-        )
-
+        product = "⭐ Stars: " + str(order["amount"])
     else:
-
         product = (
             "💎 Premium: "
             + str(order["months"])
@@ -386,17 +272,9 @@ def order_text(order):
     return (
         product
         + "\n🎁 Получатель: "
-        + order.get(
-            "recipient",
-            "не указан"
-        )
+        + order.get("recipient", "не указан")
         + "\n💰 Сумма: "
-        + money(
-            order.get(
-                "price",
-                0
-            )
-        )
+        + money(order.get("price", 0))
         + " ₽"
     )
 
@@ -407,9 +285,7 @@ def order_text(order):
 
 def main_menu(user_id):
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
         types.InlineKeyboardButton(
@@ -459,13 +335,9 @@ def main_menu(user_id):
 
 
 def send_main_menu(chat_id, user_id):
-
     bot.send_message(
         chat_id,
-
-        "🏠 Главное меню\n\n"
-        "Выберите нужное действие:",
-
+        "🏠 Главное меню\n\nВыберите нужное действие:",
         reply_markup=main_menu(user_id)
     )
 
@@ -479,13 +351,13 @@ def create_order(user_id, data):
     data["created_at"] = time.time()
     data["expired"] = False
     data["confirmed"] = False
-    data["recipient"] = "не указан"
+    data["receipt_received"] = False
 
     orders[user_id] = data
 
 
 # =========================================================
-# АВТООТМЕНА ЗАКАЗОВ
+# АВТООТМЕНА 30 МИНУТ
 # =========================================================
 
 def expire_orders_loop():
@@ -493,7 +365,6 @@ def expire_orders_loop():
     while True:
 
         try:
-
             now = time.time()
 
             for user_id, order in list(orders.items()):
@@ -504,52 +375,29 @@ def expire_orders_loop():
                 if order.get("expired"):
                     continue
 
-                created_at = order.get(
-                    "created_at",
-                    now
-                )
+                created_at = order.get("created_at", now)
 
                 if now - created_at < 1800:
                     continue
 
                 order["expired"] = True
 
-                orders.pop(
-                    user_id,
-                    None
-                )
-
-                waiting_receipt.discard(
-                    user_id
-                )
+                orders.pop(user_id, None)
+                waiting_receipt.discard(user_id)
 
                 try:
-
                     bot.send_message(
                         user_id,
-
                         "❌ Заказ отменён.\n\n"
-                        "⏱ Прошло 30 минут "
-                        "с момента создания заказа.\n\n"
-                        "Если хотите купить снова — "
-                        "нажмите /start.",
-
+                        "⏱ Прошло 30 минут с момента создания заказа.\n\n"
+                        "Если хотите купить снова — нажмите /start.",
                         reply_markup=main_menu(user_id)
                     )
-
                 except Exception as error:
-
-                    print(
-                        "Ошибка отправки отмены:",
-                        error
-                    )
+                    print("Ошибка отмены:", error)
 
         except Exception as error:
-
-            print(
-                "Ошибка expire_orders_loop:",
-                error
-            )
+            print("Ошибка expire_orders_loop:", error)
 
         time.sleep(30)
 
@@ -574,16 +422,7 @@ def start(message):
     waiting_receipt.discard(user_id)
     waiting_review.discard(user_id)
     broadcast_waiting.discard(user_id)
-
-    price_waiting.pop(
-        user_id,
-        None
-    )
-
-    orders.pop(
-        user_id,
-        None
-    )
+    price_waiting.pop(user_id, None)
 
     bot.send_message(
         message.chat.id,
@@ -628,9 +467,7 @@ def stars(call):
 
     bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=2
-    )
+    markup = types.InlineKeyboardMarkup(row_width=2)
 
     for amount, price in prices["stars"].items():
 
@@ -641,7 +478,6 @@ def stars(call):
                 + " — "
                 + money(price)
                 + " ₽",
-
                 callback_data="star_" + amount
             )
         )
@@ -661,18 +497,13 @@ def stars(call):
     )
 
     try:
-
         bot.edit_message_text(
             "⭐ Выберите количество Stars:",
-
             call.message.chat.id,
             call.message.message_id,
-
             reply_markup=markup
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
             "⭐ Выберите количество Stars:",
@@ -689,23 +520,17 @@ def stars(call):
 )
 def choose_stars(call):
 
-    amount = call.data.split(
-        "_",
-        1
-    )[1]
+    amount = call.data.split("_", 1)[1]
 
     if amount not in prices["stars"]:
-
         bot.answer_callback_query(
             call.id,
             "❌ Такой пакет отсутствует"
         )
-
         return
 
     create_order(
         call.from_user.id,
-
         {
             "product": "Stars",
             "amount": int(amount),
@@ -751,28 +576,27 @@ def custom_stars(call):
 
 def custom_stars_amount(message):
 
-    try:
-
-        amount = int(
-            message.text.strip()
-        )
-
-    except Exception:
-
+    if not message.text:
         bot.send_message(
             message.chat.id,
             "❌ Введите количество числом."
         )
+        return
 
+    try:
+        amount = int(message.text.strip())
+    except ValueError:
+        bot.send_message(
+            message.chat.id,
+            "❌ Введите количество числом."
+        )
         return
 
     if amount < 50:
-
         bot.send_message(
             message.chat.id,
             "❌ Минимум — 50 Stars."
         )
-
         return
 
     price = round(
@@ -782,7 +606,6 @@ def custom_stars_amount(message):
 
     create_order(
         message.from_user.id,
-
         {
             "product": "Stars",
             "amount": amount,
@@ -808,9 +631,7 @@ def premium(call):
 
     bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     for months, price in prices["premium"].items():
 
@@ -821,7 +642,6 @@ def premium(call):
                 + " месяцев — "
                 + money(price)
                 + " ₽",
-
                 callback_data="premium_" + months
             )
         )
@@ -834,18 +654,13 @@ def premium(call):
     )
 
     try:
-
         bot.edit_message_text(
             "💎 Выберите Telegram Premium:",
-
             call.message.chat.id,
             call.message.message_id,
-
             reply_markup=markup
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
             "💎 Выберите Telegram Premium:",
@@ -862,23 +677,17 @@ def premium(call):
 )
 def choose_premium(call):
 
-    months = call.data.split(
-        "_",
-        1
-    )[1]
+    months = call.data.split("_", 1)[1]
 
     if months not in prices["premium"]:
-
         bot.answer_callback_query(
             call.id,
             "❌ Такой вариант отсутствует"
         )
-
         return
 
     create_order(
         call.from_user.id,
-
         {
             "product": "Premium",
             "months": int(months),
@@ -899,11 +708,7 @@ def choose_premium(call):
 # ПОЛУЧАТЕЛЬ
 # =========================================================
 
-def show_recipient(
-    chat_id,
-    message_id,
-    user_id
-):
+def show_recipient(chat_id, message_id, user_id):
 
     order = orders.get(user_id)
 
@@ -913,9 +718,7 @@ def show_recipient(
     if order.get("expired"):
         return
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
         types.InlineKeyboardButton(
@@ -961,16 +764,13 @@ def show_recipient(
     else:
 
         try:
-
             bot.edit_message_text(
                 text,
                 chat_id,
                 message_id,
                 reply_markup=markup
             )
-
         except Exception:
-
             bot.send_message(
                 chat_id,
                 text,
@@ -988,16 +788,20 @@ def show_recipient(
 def recipient_self(call):
 
     user_id = call.from_user.id
-
     order = orders.get(user_id)
 
     if not order:
-
         bot.answer_callback_query(
             call.id,
             "❌ Заказ не найден"
         )
+        return
 
+    if order.get("expired"):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ отменён"
+        )
         return
 
     order["recipient"] = get_username(
@@ -1024,6 +828,17 @@ def recipient_other(call):
 
     bot.answer_callback_query(call.id)
 
+    user_id = call.from_user.id
+
+    order = orders.get(user_id)
+
+    if not order:
+        bot.send_message(
+            call.message.chat.id,
+            "❌ Заказ не найден."
+        )
+        return
+
     msg = bot.send_message(
         call.message.chat.id,
 
@@ -1034,21 +849,70 @@ def recipient_other(call):
 
     bot.register_next_step_handler(
         msg,
-        other_recipient
+        save_recipient
     )
 
 
-def other_recipient(message):
+def save_recipient(message):
+
+    user_id = message.from_user.id
+    order = orders.get(user_id)
+
+    if not order:
+        bot.send_message(
+            message.chat.id,
+            "❌ Заказ не найден."
+        )
+        return
 
     if not message.text:
-
         bot.send_message(
             message.chat.id,
             "❌ Введите username."
         )
-
         return
 
-    username = message.text.strip()
+    recipient = message.text.strip()
 
-    if not u
+    if not recipient.startswith("@"):
+        recipient = "@" + recipient
+
+    order["recipient"] = recipient
+
+    show_payment(
+        message.chat.id,
+        None,
+        user_id
+    )
+
+
+# =========================================================
+# ОПЛАТА
+# =========================================================
+
+def show_payment(chat_id, message_id, user_id):
+
+    order = orders.get(user_id)
+
+    if not order:
+        return
+
+    text = (
+        "💳 ОПЛАТА\n\n"
+        + order_text(order)
+        + "\n\n"
+        "Выберите способ оплаты:"
+    )
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "🏦 Сбербанк",
+            callback_data="pay_sber"
+        )
+    )
+
+    markup.add(
+        types.InlineKeyboardButton(
+  
