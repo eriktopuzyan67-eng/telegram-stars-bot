@@ -995,31 +995,56 @@ def receipt(message):
         return
 
     order["receipt_received"] = True
+    order["payment_status"] = "waiting"
+
     waiting_receipt.discard(user_id)
 
+    # Сообщение покупателю
     bot.send_message(
         message.chat.id,
         "✅ Чек получен!\n\n"
-        "Ожидайте проверки оплаты администратором."
+        "⏳ Ожидайте проверки оплаты администратором."
+    )
+
+    # Кнопки админа
+    markup = types.InlineKeyboardMarkup(row_width=2)
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "✅ Одобрить оплату",
+            callback_data="approve_" + str(user_id)
+        ),
+        types.InlineKeyboardButton(
+            "❌ Отказать",
+            callback_data="reject_" + str(user_id)
+        )
+    )
+
+    admin_text = (
+        "💳 НОВЫЙ ЧЕК\n\n"
+        + order_text(order)
+        + "\n\n"
+        + "👤 Покупатель: "
+        + username(message.from_user)
+        + "\n"
+        + "🆔 ID: "
+        + str(user_id)
+        + "\n"
+        + "💳 Способ: "
+        + order.get("payment_method", "не указан")
+        + "\n"
+        + "📌 Статус: Ожидает проверки"
     )
 
     try:
-        admin_text = (
-            "💳 НОВЫЙ ЧЕК\n\n"
-            + order_text(order)
-            + "\n\n"
-            + "👤 Покупатель: "
-            + username(message.from_user)
-            + "\n"
-            + "🆔 ID: "
-            + str(user_id)
-        )
 
         bot.send_message(
             ADMIN_ID,
-            admin_text
+            admin_text,
+            reply_markup=markup
         )
 
+        # Пересылаем сам чек админу
         bot.forward_message(
             ADMIN_ID,
             message.chat.id,
@@ -1027,11 +1052,804 @@ def receipt(message):
         )
 
     except Exception as e:
-        print("Ошибка отправки чека админу:", e)
+
+        print(
+            "Ошибка отправки чека админу:",
+            e
+        )
 
 
 # =========================================================
-# ЗАПУСК БОТА
+# ОДОБРЕНИЕ ОПЛАТЫ
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data.startswith("approve_")
+)
+def approve_payment(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.split("_", 1)[1]
+        )
+    except Exception:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Ошибка заказа",
+            show_alert=True
+        )
+        return
+
+    order = orders.get(user_id)
+
+    if not order:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден",
+            show_alert=True
+        )
+        return
+
+    order["payment_status"] = "approved"
+    order["confirmed"] = True
+    order["completed"] = False
+
+    bot.answer_callback_query(
+        call.id,
+        "✅ Оплата одобрена"
+    )
+
+    # Кнопка "Заказ выполнен"
+    markup = types.InlineKeyboardMarkup()
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "✅ Заказ выполнен",
+            callback_data="complete_" + str(user_id)
+        )
+    )
+
+    admin_text = (
+        "✅ ОПЛАТА ОДОБРЕНА\n\n"
+        + order_text(order)
+        + "\n\n"
+        + "👤 Покупатель: ID "
+        + str(user_id)
+        + "\n\n"
+        + "📦 Теперь выполните заказ."
+    )
+
+    try:
+
+        bot.edit_message_text(
+            admin_text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+
+    except Exception:
+        bot.send_message(
+            ADMIN_ID,
+            admin_text,
+            reply_markup=markup
+        )
+
+    # Сообщение покупателю
+    try:
+
+        bot.send_message(
+            user_id,
+            "✅ Оплата подтверждена!\n\n"
+            "📦 Ваш заказ принят в работу.\n"
+            "⏳ Ожидайте выполнения заказа."
+        )
+
+    except Exception as e:
+
+        print(
+            "Ошибка сообщения покупателю:",
+            e
+        )
+
+
+# =========================================================
+# ОТКАЗ ОПЛАТЫ
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data.startswith("reject_")
+)
+def reject_payment(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.split("_", 1)[1]
+        )
+    except Exception:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Ошибка заказа",
+            show_alert=True
+        )
+        return
+
+    order = orders.get(user_id)
+
+    if not order:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден",
+            show_alert=True
+        )
+        return
+
+    order["payment_status"] = "rejected"
+    order["confirmed"] = False
+
+    bot.answer_callback_query(
+        call.id,
+        "❌ Оплата отклонена"
+    )
+
+    try:
+
+        bot.edit_message_text(
+            "❌ ОПЛАТА ОТКЛОНЕНА\n\n"
+            + order_text(order)
+            + "\n\n"
+            + "👤 Покупатель: ID "
+            + str(user_id),
+            call.message.chat.id,
+            call.message.message_id
+        )
+
+    except Exception:
+        pass
+
+    try:
+
+        bot.send_message(
+            user_id,
+            "❌ Оплата не подтверждена.\n\n"
+            "Пожалуйста, свяжитесь с поддержкой:\n"
+            "@"
+            + SUPPORT_USERNAME
+        )
+
+    except Exception as e:
+
+        print(
+            "Ошибка сообщения покупателю:",
+            e
+        )
+
+
+# =========================================================
+# ЗАКАЗ ВЫПОЛНЕН
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data.startswith("complete_")
+)
+def complete_order(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    try:
+        user_id = int(
+            call.data.split("_", 1)[1]
+        )
+    except Exception:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Ошибка заказа",
+            show_alert=True
+        )
+        return
+
+    order = orders.get(user_id)
+
+    if not order:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден",
+            show_alert=True
+        )
+        return
+
+    if order.get("payment_status") != "approved":
+        bot.answer_callback_query(
+            call.id,
+            "❌ Сначала одобрите оплату",
+            show_alert=True
+        )
+        return
+
+    order["completed"] = True
+    order["payment_status"] = "completed"
+
+    # Разрешаем покупателю оставить отзыв
+    order["can_review"] = True
+
+    bot.answer_callback_query(
+        call.id,
+        "✅ Заказ отмечен выполненным"
+    )
+
+    try:
+
+        bot.edit_message_text(
+            "✅ ЗАКАЗ ВЫПОЛНЕН\n\n"
+            + order_text(order)
+            + "\n\n"
+            + "👤 Покупатель: ID "
+            + str(user_id),
+            call.message.chat.id,
+            call.message.message_id
+        )
+
+    except Exception:
+        pass
+
+    try:
+
+        markup = types.InlineKeyboardMarkup()
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "⭐ Оставить отзыв",
+                callback_data="review"
+            )
+        )
+
+        bot.send_message(
+            user_id,
+            "🎉 Ваш заказ выполнен!\n\n"
+            "Спасибо за покупку ❤️\n\n"
+            "Теперь вы можете оставить отзыв.",
+            reply_markup=markup
+        )
+
+    except Exception as e:
+
+        print(
+            "Ошибка сообщения о выполнении:",
+            e
+        )
+
+
+# =========================================================
+# ОТЗЫВ
+# Только покупатели с выполненным заказом
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data == "review"
+)
+def review(call):
+
+    user_id = call.from_user.id
+
+    # Проверяем, есть ли выполненный заказ
+    completed_order = None
+
+    for order in orders.values():
+
+        if (
+            order.get("completed") is True
+            and order.get("can_review") is True
+        ):
+            # orders хранится по user_id
+            if orders.get(user_id) is order:
+                completed_order = order
+                break
+
+    if completed_order is None:
+
+        bot.answer_callback_query(
+            call.id,
+            "❌ Отзыв доступен только после выполненного заказа.",
+            show_alert=True
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    waiting_review.add(user_id)
+
+    bot.send_message(
+        call.message.chat.id,
+        "⭐ Напишите ваш отзыв одним сообщением."
+    )
+
+
+# =========================================================
+# ПОЛУЧЕНИЕ ОТЗЫВА
+# =========================================================
+
+@bot.message_handler(
+    func=lambda m: (
+        m.from_user.id in waiting_review
+        and bool(m.text)
+    )
+)
+def receive_review(message):
+
+    user_id = message.from_user.id
+
+    if user_id not in waiting_review:
+        return
+
+    order = orders.get(user_id)
+
+    if not order or not order.get("completed"):
+        waiting_review.discard(user_id)
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Отзыв можно оставить только после выполнения заказа."
+        )
+        return
+
+    waiting_review.discard(user_id)
+
+    review_text = message.text.strip()
+
+    if not review_text:
+        bot.send_message(
+            message.chat.id,
+            "❌ Отзыв не может быть пустым."
+        )
+        return
+
+    admin_review = (
+        "⭐ НОВЫЙ ОТЗЫВ\n\n"
+        + "👤 Покупатель: "
+        + username(message.from_user)
+        + "\n"
+        + "🆔 ID: "
+        + str(user_id)
+        + "\n\n"
+        + review_text
+    )
+
+    try:
+
+        bot.send_message(
+            ADMIN_ID,
+            admin_review
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "✅ Спасибо за ваш отзыв! ❤️"
+        )
+
+        # Чтобы один заказ нельзя было использовать
+        # для бесконечного количества отзывов
+        order["can_review"] = False
+
+    except Exception as e:
+
+        print(
+            "Ошибка отправки отзыва:",
+            e
+        )
+
+
+# =========================================================
+# РАССЫЛКА — АДМИН
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data == "broadcast"
+)
+def broadcast_start(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    broadcast_waiting.add(call.from_user.id)
+
+    bot.send_message(
+        call.message.chat.id,
+        "📢 РАССЫЛКА\n\n"
+        "Отправьте сообщение, которое нужно разослать всем пользователям.\n\n"
+        "Можно отправить текст, фото или документ.\n\n"
+        "Для отмены отправьте /cancel."
+    )
+
+
+# =========================================================
+# ПОЛУЧЕНИЕ РАССЫЛКИ
+# =========================================================
+
+@bot.message_handler(
+    func=lambda m: (
+        m.from_user.id in broadcast_waiting
+        and m.from_user.id == ADMIN_ID
+    ),
+    content_types=[
+        "text",
+        "photo",
+        "document",
+        "video"
+    ]
+)
+def broadcast_send(message):
+
+    user_id = message.from_user.id
+
+    if user_id not in broadcast_waiting:
+        return
+
+    if message.text == "/cancel":
+        broadcast_waiting.discard(user_id)
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Рассылка отменена."
+        )
+        return
+
+    broadcast_waiting.discard(user_id)
+
+    sent = 0
+    failed = 0
+
+    bot.send_message(
+        ADMIN_ID,
+        "📢 Начинаю рассылку...\n"
+        "👥 Пользователей: "
+        + str(len(users))
+    )
+
+    for target_id in list(users):
+
+        try:
+
+            bot.copy_message(
+                target_id,
+                message.chat.id,
+                message.message_id
+            )
+
+            sent += 1
+
+            time.sleep(0.05)
+
+        except Exception as e:
+
+            failed += 1
+
+            print(
+                "Ошибка рассылки пользователю",
+                target_id,
+                e
+            )
+
+    bot.send_message(
+        ADMIN_ID,
+        "✅ РАССЫЛКА ЗАВЕРШЕНА\n\n"
+        "📨 Отправлено: "
+        + str(sent)
+        + "\n"
+        "❌ Ошибок: "
+        + str(failed)
+    )
+
+
+# =========================================================
+# ИЗМЕНЕНИЕ ЦЕН
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: c.data == "prices"
+)
+def prices_menu(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    markup = types.InlineKeyboardMarkup(
+        row_width=1
+    )
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "⭐ Цена 1 Star",
+            callback_data="price_star"
+        )
+    )
+
+    for amount in prices["stars"]:
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "⭐ "
+                + amount
+                + " Stars",
+                callback_data="price_stars_" + amount
+            )
+        )
+
+    for months in prices["premium"]:
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "💎 Premium "
+                + months
+                + " мес.",
+                callback_data="price_premium_" + months
+            )
+        )
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="home"
+        )
+    )
+
+    bot.send_message(
+        call.message.chat.id,
+        "💰 ИЗМЕНЕНИЕ ЦЕН\n\n"
+        "Выберите цену:",
+        reply_markup=markup
+    )
+
+
+# =========================================================
+# ВЫБОР ЦЕНЫ
+# =========================================================
+
+@bot.callback_query_handler(
+    func=lambda c: (
+        c.data == "price_star"
+        or c.data.startswith("price_stars_")
+        or c.data.startswith("price_premium_")
+    )
+)
+def choose_price(call):
+
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Нет доступа",
+            show_alert=True
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    data = call.data
+
+    if data == "price_star":
+
+        price_waiting[
+            call.from_user.id
+        ] = (
+            "star_price",
+            None
+        )
+
+        text = (
+            "⭐ Текущая цена 1 Star: "
+            + money(prices["star_price"])
+            + " ₽\n\n"
+            "Введите новую цену:"
+        )
+
+    elif data.startswith("price_stars_"):
+
+        amount = data.split(
+            "_",
+            2
+        )[2]
+
+        price_waiting[
+            call.from_user.id
+        ] = (
+            "stars",
+            amount
+        )
+
+        text = (
+            "⭐ "
+            + amount
+            + " Stars\n"
+            "Текущая цена: "
+            + money(prices["stars"][amount])
+            + " ₽\n\n"
+            "Введите новую цену:"
+        )
+
+    else:
+
+        months = data.split(
+            "_",
+            2
+        )[2]
+
+        price_waiting[
+            call.from_user.id
+        ] = (
+            "premium",
+            months
+        )
+
+        text = (
+            "💎 Premium "
+            + months
+            + " месяцев\n"
+            "Текущая цена: "
+            + money(prices["premium"][months])
+            + " ₽\n\n"
+            "Введите новую цену:"
+        )
+
+    bot.send_message(
+        call.message.chat.id,
+        text
+    )
+
+
+# =========================================================
+# ПОЛУЧЕНИЕ НОВОЙ ЦЕНЫ
+# =========================================================
+
+@bot.message_handler(
+    func=lambda m: (
+        m.from_user.id in price_waiting
+        and m.from_user.id == ADMIN_ID
+        and bool(m.text)
+    )
+)
+def set_new_price(message):
+
+    user_id = message.from_user.id
+
+    if message.text == "/cancel":
+
+        price_waiting.pop(
+            user_id,
+            None
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Изменение цены отменено."
+        )
+        return
+
+    try:
+
+        new_price = float(
+            message.text.replace(",", ".").strip()
+        )
+
+        if new_price <= 0:
+            raise ValueError
+
+    except Exception:
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Введите корректную цену.\n"
+            "Например: 150 или 149.50"
+        )
+        return
+
+    target = price_waiting.pop(
+        user_id
+    )
+
+    category, key = target
+
+    if category == "star_price":
+
+        prices["star_price"] = new_price
+
+        changed = (
+            "Цена 1 Star изменена на "
+            + money(new_price)
+            + " ₽"
+        )
+
+    elif category == "stars":
+
+        prices["stars"][key] = new_price
+
+        changed = (
+            "Цена "
+            + key
+            + " Stars изменена на "
+            + money(new_price)
+            + " ₽"
+        )
+
+    else:
+
+        prices["premium"][key] = new_price
+
+        changed = (
+            "Цена Premium "
+            + key
+            + " мес. изменена на "
+            + money(new_price)
+            + " ₽"
+        )
+
+    save_prices()
+
+    bot.send_message(
+        message.chat.id,
+        "✅ Цена успешно изменена!\n\n"
+        + changed
+    )
+
+
+# =========================================================
+# ОТМЕНА
+# =========================================================
+
+@bot.message_handler(
+    commands=["cancel"]
+)
+def cancel(message):
+
+    user_id = message.from_user.id
+
+    broadcast_waiting.discard(user_id)
+    waiting_review.discard(user_id)
+    waiting_receipt.discard(user_id)
+    price_waiting.pop(user_id, None)
+
+    bot.send_message(
+        message.chat.id,
+        "❌ Действие отменено."
+    )
+
+
+# =========================================================
+# ЗАПУСК
 # =========================================================
 
 print("SELL STARS RT запущен")
@@ -1039,6 +1857,7 @@ print("SELL STARS RT запущен")
 while True:
 
     try:
+
         bot.infinity_polling(
             skip_pending=True,
             timeout=30,
@@ -1046,5 +1865,10 @@ while True:
         )
 
     except Exception as e:
-        print("Ошибка бота:", e)
+
+        print(
+            "Ошибка бота:",
+            e
+        )
+
         time.sleep(5)
