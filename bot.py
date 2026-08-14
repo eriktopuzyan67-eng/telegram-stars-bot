@@ -999,8 +999,64 @@ def receipt(message):
     order["receipt_received"] = True
     waiting_receipt.discard(user_id)
 
-    bot.send_message(
+        bot.send_message(
         message.chat.id,
-
         "✅ Чек получен!\n\n"
+        "Ожидайте проверки оплаты администратором."
+    )
+
+    # Отправляем информацию администратору
+    try:
+        admin_text = (
+            "💳 НОВЫЙ ЧЕК\n\n"
+            + order_text(order)
+            + "\n\n"
+            + "👤 Покупатель: "
+            + username(message.from_user)
+            + "\n"
+            + "🆔 ID: "
+            + str(user_id)
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+            admin_text
+        )
+
+        # Пересылаем сам чек администратору
+        if message.content_type == "photo":
+            bot.forward_message(
+                ADMIN_ID,
+                message.chat.id,
+                message.message_id
+            )
+
+        elif message.content_type == "document":
+            bot.forward_message(
+                ADMIN_ID,
+                message.chat.id,
+                message.message_id
+            )
+
+    except Exception as e:
+        print("Ошибка отправки чека админу:", e)
+
+
+# =========================================================
+# ЗАПУСК БОТА
+# =========================================================
+
+print("SELL STARS RT запущен")
+
+while True:
+    try:
+        bot.infinity_polling(
+            skip_pending=True,
+            timeout=30,
+            long_polling_timeout=30
+        )
+
+    except Exception as e:
+        print("Ошибка бота:", e)
+        time.sleep(5)
     
