@@ -21,6 +21,7 @@ class Handler(BaseHTTPRequestHandler):
             "text/plain; charset=utf-8"
         )
         self.end_headers()
+
         self.wfile.write(
             b"SELL STARS RT is running"
         )
@@ -30,6 +31,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run_server():
+
     port = int(
         os.environ.get("PORT", "10000")
     )
@@ -72,16 +74,16 @@ SBP_DETAILS = (
 
 SUPPORT_USERNAME = "Ireqhat4"
 
-
 PRICES_FILE = "prices.json"
 USERS_FILE = "users.json"
 
 
 # =========================================================
-# ЦЕНЫ ПО УМОЛЧАНИЮ
+# ЦЕНЫ
 # =========================================================
 
 DEFAULT_PRICES = {
+
     "star_price": 1.50,
 
     "stars": {
@@ -115,9 +117,7 @@ orders = {}
 
 users = set()
 
-review_waiting = set()
-
-admin_price_waiting = {}
+admin_action = None
 
 
 # =========================================================
@@ -255,7 +255,10 @@ def money(value):
     value = float(value)
 
     if value.is_integer():
-        return str(int(value))
+
+        return str(
+            int(value)
+        )
 
     return str(value).replace(
         ".",
@@ -395,6 +398,10 @@ def order_text(order):
     )
 
 
+# =========================================================
+# ГЛАВНОЕ МЕНЮ
+# =========================================================
+
 def main_menu(user_id):
 
     markup = types.InlineKeyboardMarkup(
@@ -430,12 +437,21 @@ def main_menu(user_id):
         )
     )
 
+    # Только админ видит эти кнопки
+
     if user_id == ADMIN_ID:
 
         markup.add(
             types.InlineKeyboardButton(
-                "⚙️ Админ-панель",
-                callback_data="admin_panel"
+                "📢 Рассылка",
+                callback_data="broadcast"
+            )
+        )
+
+        markup.add(
+            types.InlineKeyboardButton(
+                "💰 Изменить цены",
+                callback_data="change_prices"
             )
         )
 
@@ -512,7 +528,7 @@ def create_order(
 
 
 # =========================================================
-# АВТОМАТИЧЕСКАЯ ОТМЕНА 30 МИНУТ
+# ОТМЕНА ЗАКАЗА ЧЕРЕЗ 30 МИНУТ
 # =========================================================
 
 def expire_orders_loop():
@@ -527,14 +543,10 @@ def expire_orders_loop():
                 orders.items()
             ):
 
-                if order.get(
-                    "confirmed"
-                ):
+                if order.get("confirmed"):
                     continue
 
-                if order.get(
-                    "expired"
-                ):
+                if order.get("expired"):
                     continue
 
                 if (
@@ -767,7 +779,7 @@ def custom_stars(call):
         call.id
     )
 
-    message = bot.send_message(
+    bot.send_message(
         call.message.chat.id,
 
         "✏️ Напишите количество Stars.\n\n"
@@ -780,7 +792,7 @@ def custom_stars(call):
     )
 
     bot.register_next_step_handler(
-        message,
+        call.message,
         custom_stars_amount
     )
 
@@ -961,11 +973,8 @@ def show_recipient(
     )
 
     if order["product"] == "Stars":
-
         back = "stars"
-
     else:
-
         back = "premium"
 
     markup.add(
@@ -1062,13 +1071,13 @@ def recipient_other(call):
         call.id
     )
 
-    message = bot.send_message(
+    bot.send_message(
         call.message.chat.id,
         "👤 Напишите @username пользователя."
     )
 
     bot.register_next_step_handler(
-        message,
+        call.message,
         save_recipient
     )
 
@@ -1100,20 +1109,4 @@ def save_recipient(message):
 
         bot.send_message(
             message.chat.id,
-            "❌ Заказ не найден."
-        )
-
-        return
-
-    if order.get("expired"):
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Заказ уже отменён."
-        )
-
-        return
-
-    order["recipient"] = recipient
-
-    show_paym
+            "❌ Заказ не найден
