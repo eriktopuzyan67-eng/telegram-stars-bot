@@ -9,7 +9,7 @@ from telebot import types
 
 
 # =========================================================
-# RENDER WEB SERVER
+# RENDER SERVER
 # =========================================================
 
 class Handler(BaseHTTPRequestHandler):
@@ -31,7 +31,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run_server():
-
     port = int(
         os.environ.get("PORT", "10000")
     )
@@ -65,11 +64,13 @@ if not BOT_TOKEN:
 ADMIN_ID = 6189064599
 
 SBER_DETAILS = (
-    "2202208584208103 Эрик Ваанович Т."
+    "2202208584208103\n"
+    "Эрик Ваанович Т."
 )
 
 SBP_DETAILS = (
-    "2202208584208103 Эрик Ваанович Т."
+    "2202208584208103\n"
+    "Эрик Ваанович Т."
 )
 
 SUPPORT_USERNAME = "Ireqhat4"
@@ -83,7 +84,6 @@ USERS_FILE = "users.json"
 # =========================================================
 
 DEFAULT_PRICES = {
-
     "star_price": 1.50,
 
     "stars": {
@@ -103,6 +103,10 @@ DEFAULT_PRICES = {
 }
 
 
+# =========================================================
+# BOT
+# =========================================================
+
 bot = telebot.TeleBot(
     BOT_TOKEN,
     parse_mode=None
@@ -110,14 +114,16 @@ bot = telebot.TeleBot(
 
 
 # =========================================================
-# СОСТОЯНИЯ
+# ДАННЫЕ
 # =========================================================
 
 orders = {}
 
 users = set()
 
-admin_action = None
+admin_price_waiting = {}
+
+admin_broadcast_waiting = set()
 
 
 # =========================================================
@@ -126,23 +132,22 @@ admin_action = None
 
 def save_prices():
 
-    data = {
-        "star_price": float(
-            prices["star_price"]
-        ),
-
-        "stars": {
-            str(k): float(v)
-            for k, v in prices["stars"].items()
-        },
-
-        "premium": {
-            str(k): float(v)
-            for k, v in prices["premium"].items()
-        }
-    }
-
     try:
+        data = {
+            "star_price": float(
+                prices["star_price"]
+            ),
+
+            "stars": {
+                str(k): float(v)
+                for k, v in prices["stars"].items()
+            },
+
+            "premium": {
+                str(k): float(v)
+                for k, v in prices["premium"].items()
+            }
+        }
 
         with open(
             PRICES_FILE,
@@ -181,7 +186,7 @@ def load_prices():
             "star_price": float(
                 data.get(
                     "star_price",
-                    1.50
+                    DEFAULT_PRICES["star_price"]
                 )
             ),
 
@@ -192,24 +197,24 @@ def load_prices():
 
         for amount, default_price in DEFAULT_PRICES["stars"].items():
 
-            result["stars"][str(amount)] = float(
+            result["stars"][amount] = float(
                 data.get(
                     "stars",
                     {}
                 ).get(
-                    str(amount),
+                    amount,
                     default_price
                 )
             )
 
         for months, default_price in DEFAULT_PRICES["premium"].items():
 
-            result["premium"][str(months)] = float(
+            result["premium"][months] = float(
                 data.get(
                     "premium",
                     {}
                 ).get(
-                    str(months),
+                    months,
                     default_price
                 )
             )
@@ -219,7 +224,7 @@ def load_prices():
     except Exception:
 
         data = {
-            "star_price": 1.50,
+            "star_price": DEFAULT_PRICES["star_price"],
 
             "stars": DEFAULT_PRICES["stars"].copy(),
 
@@ -260,7 +265,9 @@ def money(value):
             int(value)
         )
 
-    return str(value).replace(
+    return str(
+        value
+    ).replace(
         ".",
         ","
     )
@@ -289,7 +296,7 @@ def refresh_star_prices():
 
 
 # =========================================================
-# ПОЛЬЗОВАТЕЛИ
+# USERS
 # =========================================================
 
 def load_users():
@@ -304,10 +311,12 @@ def load_users():
             encoding="utf-8"
         ) as file:
 
-            users = set(
-                int(x)
-                for x in json.load(file)
-            )
+            data = json.load(file)
+
+        users = set(
+            int(x)
+            for x in data
+        )
 
     except Exception:
 
@@ -342,7 +351,9 @@ def add_user(user_id):
 
     if user_id not in users:
 
-        users.add(user_id)
+        users.add(
+            user_id
+        )
 
         save_users()
 
@@ -360,7 +371,9 @@ def get_username(user):
 
         return "@" + user.username
 
-    return "ID " + str(user.id)
+    return "ID " + str(
+        user.id
+    )
 
 
 def order_text(order):
@@ -432,26 +445,24 @@ def main_menu(user_id):
     markup.add(
         types.InlineKeyboardButton(
             "💬 Поддержка",
-            url="https://t.me/"
-            + SUPPORT_USERNAME
+            url="https://t.me/" + SUPPORT_USERNAME
         )
     )
 
-    # Только админ видит эти кнопки
-
+    # Только администратор видит эти две кнопки
     if user_id == ADMIN_ID:
 
         markup.add(
             types.InlineKeyboardButton(
                 "📢 Рассылка",
-                callback_data="broadcast"
+                callback_data="admin_broadcast"
             )
         )
 
         markup.add(
             types.InlineKeyboardButton(
                 "💰 Изменить цены",
-                callback_data="change_prices"
+                callback_data="admin_prices"
             )
         )
 
@@ -508,7 +519,7 @@ def edit_message_raw(
 
 
 # =========================================================
-# СОЗДАНИЕ ЗАКАЗА
+# ЗАКАЗ
 # =========================================================
 
 def create_order(
@@ -524,11 +535,13 @@ def create_order(
 
     order["waiting_receipt"] = False
 
+    order["receipt_received"] = False
+
     orders[user_id] = order
 
 
 # =========================================================
-# ОТМЕНА ЗАКАЗА ЧЕРЕЗ 30 МИНУТ
+# АВТООТМЕНА 30 МИНУТ
 # =========================================================
 
 def expire_orders_loop():
@@ -549,14 +562,12 @@ def expire_orders_loop():
                 if order.get("expired"):
                     continue
 
-                if (
+                created_at = order.get(
+                    "created_at",
                     now
-                    - order.get(
-                        "created_at",
-                        now
-                    )
-                    < 1800
-                ):
+                )
+
+                if now - created_at < 1800:
                     continue
 
                 order["expired"] = True
@@ -626,13 +637,10 @@ def start(message):
             message.from_user
         )
         + "!\n\n"
-
         "✨ Добро пожаловать "
         "в SELL STARS RT!\n\n"
-
         "⭐ Telegram Stars\n"
         "💎 Telegram Premium\n\n"
-
         "Выберите нужное действие:",
 
         reply_markup=main_menu(
@@ -766,7 +774,7 @@ def choose_stars(call):
 
 
 # =========================================================
-# СВОЁ КОЛИЧЕСТВО STARS
+# CUSTOM STARS
 # =========================================================
 
 @bot.callback_query_handler(
@@ -779,7 +787,7 @@ def custom_stars(call):
         call.id
     )
 
-    bot.send_message(
+    message = bot.send_message(
         call.message.chat.id,
 
         "✏️ Напишите количество Stars.\n\n"
@@ -792,7 +800,7 @@ def custom_stars(call):
     )
 
     bot.register_next_step_handler(
-        call.message,
+        message,
         custom_stars_amount
     )
 
@@ -1071,13 +1079,13 @@ def recipient_other(call):
         call.id
     )
 
-    bot.send_message(
+    message = bot.send_message(
         call.message.chat.id,
         "👤 Напишите @username пользователя."
     )
 
     bot.register_next_step_handler(
-        call.message,
+        message,
         save_recipient
     )
 
@@ -1093,20 +1101,4 @@ def save_recipient(message):
 
         return
 
-    recipient = message.text.strip()
-
-    if not recipient.startswith("@"):
-
-        recipient = "@" + recipient
-
-    user_id = message.from_user.id
-
-    order = orders.get(
-        user_id
-    )
-
-    if not order:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Заказ не найден
+    recipient = message.tex
