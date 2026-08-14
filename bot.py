@@ -1070,8 +1070,6 @@ def pay_sber(call):
     order = orders[user_id]
 
     if order.get("expired"):
-
-        bot.answer_callback_qu
 # =========================================================
 # ЗАПУСК БОТА
 # =========================================================
@@ -1090,3 +1088,4 @@ if __name__ == "__main__":
             print("Ошибка бота:", error)
             import time
             time.sleep(5)
+        
