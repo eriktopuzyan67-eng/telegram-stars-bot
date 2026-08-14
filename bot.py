@@ -969,8 +969,6 @@ def pay_sbp(call):
         SBP_DETAILS,
         "СБП"
     )
-
-
 # =========================================================
 # RECEIPTS
 # =========================================================
@@ -999,13 +997,12 @@ def receipt(message):
     order["receipt_received"] = True
     waiting_receipt.discard(user_id)
 
-        bot.send_message(
+    bot.send_message(
         message.chat.id,
         "✅ Чек получен!\n\n"
         "Ожидайте проверки оплаты администратором."
     )
 
-    # Отправляем информацию администратору
     try:
         admin_text = (
             "💳 НОВЫЙ ЧЕК\n\n"
@@ -1023,20 +1020,11 @@ def receipt(message):
             admin_text
         )
 
-        # Пересылаем сам чек администратору
-        if message.content_type == "photo":
-            bot.forward_message(
-                ADMIN_ID,
-                message.chat.id,
-                message.message_id
-            )
-
-        elif message.content_type == "document":
-            bot.forward_message(
-                ADMIN_ID,
-                message.chat.id,
-                message.message_id
-            )
+        bot.forward_message(
+            ADMIN_ID,
+            message.chat.id,
+            message.message_id
+        )
 
     except Exception as e:
         print("Ошибка отправки чека админу:", e)
@@ -1049,6 +1037,7 @@ def receipt(message):
 print("SELL STARS RT запущен")
 
 while True:
+
     try:
         bot.infinity_polling(
             skip_pending=True,
@@ -1059,4 +1048,3 @@ while True:
     except Exception as e:
         print("Ошибка бота:", e)
         time.sleep(5)
-    
