@@ -1072,3 +1072,21 @@ def pay_sber(call):
     if order.get("expired"):
 
         bot.answer_callback_qu
+# =========================================================
+# ЗАПУСК БОТА
+# =========================================================
+
+if __name__ == "__main__":
+    print("SELL STARS RT запускается...")
+
+    while True:
+        try:
+            bot.infinity_polling(
+                timeout=30,
+                long_polling_timeout=30,
+                skip_pending=True
+            )
+        except Exception as error:
+            print("Ошибка бота:", error)
+            import time
+            time.sleep(5)
