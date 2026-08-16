@@ -64,8 +64,8 @@ ADMIN_ID = 6189064599
 SUPPORT_USERNAME = "Ireqhat4"
 
 # РЕКВИЗИТЫ
-SBER_DETAILS = "2202208584208103 Эрик Ваанович Т."
-SBP_DETAILS = "2202208584208103 Эрик Ваанович Т."
+SBER_DETAILS = "https://yoomoney.ru/to/4100119601496891"
+SBP_DETAILS = "https://yoomoney.ru/to/4100119601496891"
 
 PRICES_FILE = "prices.json"
 USERS_FILE = "users.json"
