@@ -61,7 +61,7 @@ if not BOT_TOKEN:
 
 ADMIN_ID = 6189064599
 
-SUPPORT_USERNAME = "Ireqhat4"
+SUPPORT_USERNAME = "RtSupp_bot"
 
 # РЕКВИЗИТЫ
 SBER_DETAILS = "https://yoomoney.ru/to/4100119601496891"
