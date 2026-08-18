@@ -9,52 +9,28 @@ from telebot import types
 
 
 # =========================================================
-# RENDER WEB SERVER
+# RENDER
 # =========================================================
 
 class Handler(BaseHTTPRequestHandler):
-
     def do_GET(self):
         self.send_response(200)
-        self.send_header(
-            "Content-Type",
-            "text/plain; charset=utf-8"
-        )
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
-
-        self.wfile.write(
-            b"SELL STARS RT is running"
-        )
+        self.wfile.write(b"SELL STARS RT is running")
 
     def log_message(self, format, *args):
         pass
 
 
 def run_server():
-    port = int(
-        os.environ.get(
-            "PORT",
-            "10000"
-        )
-    )
-
-    server = HTTPServer(
-        ("0.0.0.0", port),
-        Handler
-    )
-
-    print(
-        "Web server started on port",
-        port
-    )
-
+    port = int(os.environ.get("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    print("Web server started on port", port)
     server.serve_forever()
 
 
-threading.Thread(
-    target=run_server,
-    daemon=True
-).start()
+threading.Thread(target=run_server, daemon=True).start()
 
 
 # =========================================================
@@ -62,51 +38,32 @@ threading.Thread(
 # =========================================================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
 if not BOT_TOKEN:
-    raise RuntimeError(
-        "BOT_TOKEN не найден в Render Environment"
-    )
-
+    raise RuntimeError("BOT_TOKEN не найден в Render Environment")
 
 ADMIN_ID = 6189064599
 
 SUPPORT_USERNAME = "RtSupp_bot"
-
 REVIEWS_URL = "https://t.me/RTstoreREVIEW"
 
-# TON
-TON_ADDRESS = (
-    "UQAm8vafnYdyPH1u-IA8xD3Sqh3rO-K76LhPh8NUu4oY6J7S"
-)
+TON_ADDRESS = "UQAm8vafnYdyPH1u-IA8xD3Sqh3rO-K76LhPh8NUu4oY6J7S"
 
-# Курс TON
-TON_RUB_RATE = 125.0
+# Ссылка, которую ты прислал.
+YOOMONEY_URL = "https://yoomoney.ru/to/4100119601496891"
 
-# ЮMoney
-YOOMONEY_URL = (
-    "https://yoomoney.ru/to/4100119601496891"
-)
-
-# По твоей просьбе кнопки СБП и Сбер
-# также открывают эту ссылку.
-SBER_PAYMENT = YOOMONEY_URL
-SBP_PAYMENT = YOOMONEY_URL
+# Если позже будут другие реквизиты — меняются только эти две строки.
+SBER_DETAILS = YOOMONEY_URL
+SBP_DETAILS = YOOMONEY_URL
 
 PRICES_FILE = "prices.json"
 USERS_FILE = "users.json"
-BLOCKED_FILE = "blocked.json"
 PURCHASES_FILE = "purchases.json"
+BLOCKED_FILE = "blocked.json"
 
-
-# =========================================================
-# DEFAULT PRICES
-# =========================================================
+DEFAULT_TON_RUB_RATE = 125.0
 
 DEFAULT_PRICES = {
-
     "star_price": 1.50,
-
     "stars": {
         "50": 75,
         "100": 150,
@@ -115,12 +72,12 @@ DEFAULT_PRICES = {
         "500": 750,
         "1000": 1500
     },
-
     "premium": {
         "3": 1100,
         "6": 1550,
         "12": 2599
-    }
+    },
+    "ton_rub_rate": DEFAULT_TON_RUB_RATE
 }
 
 
@@ -128,10 +85,7 @@ DEFAULT_PRICES = {
 # BOT
 # =========================================================
 
-bot = telebot.TeleBot(
-    BOT_TOKEN,
-    parse_mode=None
-)
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode=None)
 
 
 # =========================================================
@@ -139,76 +93,30 @@ bot = telebot.TeleBot(
 # =========================================================
 
 orders = {}
-
 users = set()
-
 blocked_users = set()
-
 purchases = []
 
-price_waiting = {}
-
-broadcast_waiting = set()
-
-block_waiting = set()
-
-unblock_waiting = set()
-
 
 # =========================================================
-# FILE HELPERS
+# JSON HELPERS
 # =========================================================
 
-def load_json(
-    filename,
-    default
-):
-
+def load_json(filename, default):
     try:
-
-        with open(
-            filename,
-            "r",
-            encoding="utf-8"
-        ) as file:
-
-            return json.load(file)
-
+        with open(filename, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
-
         return default
 
 
-def save_json(
-    filename,
-    data
-):
-
+def save_json(filename, data):
     try:
-
-        with open(
-            filename,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                data,
-                file,
-                ensure_ascii=False,
-                indent=4
-            )
-
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
         return True
-
-    except Exception as error:
-
-        print(
-            "Ошибка сохранения",
-            filename,
-            error
-        )
-
+    except Exception as e:
+        print(f"Ошибка {filename}: {e}")
         return False
 
 
@@ -216,114 +124,48 @@ def save_json(
 # USERS
 # =========================================================
 
-def load_users():
-
-    global users
-
-    data = load_json(
-        USERS_FILE,
-        []
-    )
-
-    try:
-
-        users = set(
-            int(x)
-            for x in data
-        )
-
-    except Exception:
-
-        users = set()
+loaded_users = load_json(USERS_FILE, [])
+try:
+    users = {int(x) for x in loaded_users}
+except Exception:
+    users = set()
 
 
 def save_users():
-
-    save_json(
-        USERS_FILE,
-        list(users)
-    )
+    save_json(USERS_FILE, list(users))
 
 
 def add_user(user_id):
-
     if user_id not in users:
-
         users.add(user_id)
-
         save_users()
 
 
-load_users()
-
-
 # =========================================================
-# BLOCKED USERS
+# BLOCKED
 # =========================================================
 
-def load_blocked():
-
-    global blocked_users
-
-    data = load_json(
-        BLOCKED_FILE,
-        []
-    )
-
-    try:
-
-        blocked_users = set(
-            int(x)
-            for x in data
-        )
-
-    except Exception:
-
-        blocked_users = set()
+loaded_blocked = load_json(BLOCKED_FILE, [])
+try:
+    blocked_users = {int(x) for x in loaded_blocked}
+except Exception:
+    blocked_users = set()
 
 
 def save_blocked():
-
-    save_json(
-        BLOCKED_FILE,
-        list(blocked_users)
-    )
-
-
-load_blocked()
+    save_json(BLOCKED_FILE, list(blocked_users))
 
 
 # =========================================================
 # PURCHASES
 # =========================================================
 
-def load_purchases():
-
-    global purchases
-
-    data = load_json(
-        PURCHASES_FILE,
-        []
-    )
-
-    if isinstance(data, list):
-
-        purchases = data
-
-    else:
-
-        purchases = []
+loaded_purchases = load_json(PURCHASES_FILE, [])
+purchases = loaded_purchases if isinstance(loaded_purchases, list) else []
 
 
 def save_purchases():
-
-    save_json(
-        PURCHASES_FILE,
-        purchases
-    )
-
-
-load_purchases()
+    save_json(PURCHASES_FILE, purchases)
 
 
 # =========================================================
@@ -331,353 +173,187 @@ load_purchases()
 # =========================================================
 
 def load_prices():
-
-    data = load_json(
-        PRICES_FILE,
-        DEFAULT_PRICES
-    )
+    data = load_json(PRICES_FILE, {})
 
     result = {
         "star_price": float(
-            data.get(
-                "star_price",
-                DEFAULT_PRICES["star_price"]
-            )
+            data.get("star_price", DEFAULT_PRICES["star_price"])
         ),
         "stars": {},
-        "premium": {}
+        "premium": {},
+        "ton_rub_rate": float(
+            data.get("ton_rub_rate", DEFAULT_TON_RUB_RATE)
+        )
     }
 
-    for amount, default in DEFAULT_PRICES["stars"].items():
+    saved_stars = data.get("stars", {})
+    saved_premium = data.get("premium", {})
 
-        result["stars"][amount] = float(
-            data.get(
-                "stars",
-                {}
-            ).get(
-                amount,
-                default
+    for amount, default in DEFAULT_PRICES["stars"].items():
+        try:
+            result["stars"][amount] = float(
+                saved_stars.get(amount, default)
             )
-        )
+        except Exception:
+            result["stars"][amount] = float(default)
 
     for months, default in DEFAULT_PRICES["premium"].items():
-
-        result["premium"][months] = float(
-            data.get(
-                "premium",
-                {}
-            ).get(
-                months,
-                default
+        try:
+            result["premium"][months] = float(
+                saved_premium.get(months, default)
             )
-        )
+        except Exception:
+            result["premium"][months] = float(default)
 
-    save_json(
-        PRICES_FILE,
-        result
-    )
+    save_prices_data = dict(result)
+    save_json(PRICES_FILE, save_prices_data)
 
     return result
 
 
 def save_prices():
-
-    save_json(
-        PRICES_FILE,
-        prices
-    )
+    save_json(PRICES_FILE, prices)
 
 
 prices = load_prices()
+TON_RUB_RATE = float(
+    prices.get("ton_rub_rate", DEFAULT_TON_RUB_RATE)
+)
 
 
 # =========================================================
-# BASIC HELPERS
+# HELPERS
 # =========================================================
 
 def is_admin(user_id):
-
     return user_id == ADMIN_ID
 
 
 def is_blocked(user_id):
-
-    if user_id == ADMIN_ID:
-        return False
-
-    return user_id in blocked_users
+    return user_id in blocked_users and user_id != ADMIN_ID
 
 
-def user_name(user):
-
+def username(user):
     if user.username:
-
         return "@" + user.username
-
-    if user.first_name:
-
-        return user.first_name
-
-    return "ID " + str(user.id)
+    return (user.first_name or "Пользователь") + f" (ID {user.id})"
 
 
 def money(value):
-
     value = float(value)
-
     if value.is_integer():
-
-        return str(
-            int(value)
-        )
-
-    return str(
-        round(value, 2)
-    ).replace(
-        ".",
-        ","
-    )
+        return str(int(value))
+    return str(round(value, 2)).replace(".", ",")
 
 
 def ton(value):
-
     return f"{float(value):.4f}".rstrip("0").rstrip(".")
 
 
-def stars_ton_price(
-    rub_price,
-    amount
-):
-
-    rub_price = float(rub_price)
-
-    if int(amount) != 50:
-
-        rub_price *= 0.99
-
-    return round(
-        rub_price / TON_RUB_RATE,
-        4
-    )
+def ton_payment_price(rub_price):
+    # Скидка 1% действует только при выборе способа оплаты TON.
+    discounted_rub = float(rub_price) * 0.99
+    return round(discounted_rub / TON_RUB_RATE, 4)
 
 
-def premium_ton_price(
-    rub_price
-):
-
-    rub_price = float(rub_price)
-
-    rub_price *= 0.99
-
-    return round(
-        rub_price / TON_RUB_RATE,
-        4
-    )
-
-
-# =========================================================
-# ORDER HELPERS
-# =========================================================
-
-def create_order(
-    user_id,
-    data
-):
-
-    order = dict(data)
-
-    order["user_id"] = user_id
-
-    order["created_at"] = int(
-        time.time()
-    )
-
-    order["payment_method"] = None
-
-    order["payment_status"] = (
-        "waiting_method"
-    )
-
-    order["status"] = "new"
-
-    orders[user_id] = order
-
-    return order
+def current_ton_price_without_discount(rub_price):
+    return round(float(rub_price) / TON_RUB_RATE, 4)
 
 
 def order_text(order):
+    product = order.get("product")
 
-    if order.get("product") == "Stars":
+    if product == "Stars":
+        product_text = f"⭐ Stars: {order.get('stars', 0)}"
+    else:
+        product_text = f"💎 Premium: {order.get('months', 0)} мес."
 
-        amount = int(
-            order.get(
-                "stars",
-                order.get(
-                    "amount",
-                    0
-                )
-            )
-        )
+    price_rub = float(order.get("price_rub", 0))
 
-        rub = float(
-            order.get(
-                "price_rub",
-                0
-            )
-        )
-
-        return (
-            "⭐ Stars: "
-            + str(amount)
-            + "\n"
-            "💰 Цена: "
-            + money(rub)
-            + " ₽"
-        )
-
-    if order.get("product") == "Premium":
-
-        months = int(
-            order.get(
-                "months",
-                0
-            )
-        )
-
-        rub = float(
-            order.get(
-                "price_rub",
-                order.get(
-                    "price",
-                    0
-                )
-            )
-        )
-
-        return (
-            "💎 Premium: "
-            + str(months)
-            + " мес.\n"
-            "💰 Цена: "
-            + money(rub)
-            + " ₽"
-        )
-
-    return "❌ Неизвестный товар"
-
-
-def save_purchase(
-    order
-):
-
-    purchase = dict(order)
-
-    purchase["completed_at"] = int(
-        time.time()
+    text = (
+        product_text
+        + "\n"
+        + "💰 Цена: "
+        + money(price_rub)
+        + " ₽"
     )
 
-    purchases.append(
-        purchase
-    )
+    if order.get("recipient"):
+        text += "\n🎁 Получатель: " + str(order["recipient"])
 
-    save_purchases()
+    return text
 
 
-# =========================================================
-# BLOCK CHECK
-# =========================================================
+def create_order(user_id, data):
+    order = dict(data)
+    order["user_id"] = user_id
+    order["created_at"] = int(time.time())
+    order["status"] = "created"
+    orders[user_id] = order
+    return order
 
-def check_blocked(
-    user_id,
-    call_id=None
-):
 
-    if not is_blocked(user_id):
+def finish_purchase(user_id):
+    order = orders.get(user_id)
+    if not order:
         return False
 
-    if call_id:
-
-        try:
-
-            bot.answer_callback_query(
-                call_id,
-                "🚫 Вы заблокированы",
-                show_alert=True
-            )
-
-        except Exception:
-            pass
-
+    record = dict(order)
+    record["completed_at"] = int(time.time())
+    purchases.append(record)
+    save_purchases()
+    orders.pop(user_id, None)
     return True
-    # =========================================================
+
+
+# =========================================================
 # MAIN MENU
 # =========================================================
 
 def main_menu(user_id):
-
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
-        types.InlineKeyboardButton(
-            "⭐ Купить Stars",
-            callback_data="stars"
-        )
+        types.InlineKeyboardButton("⭐ Купить Stars", callback_data="stars")
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "💎 Купить Telegram Premium",
             callback_data="premium"
         )
     )
-
     markup.add(
-        types.InlineKeyboardButton(
-            "👤 Профиль",
-            callback_data="profile"
-        )
+        types.InlineKeyboardButton("👤 Профиль", callback_data="profile")
     )
-
     markup.add(
-        types.InlineKeyboardButton(
-            "⭐ Отзывы",
-            url=REVIEWS_URL
-        )
+        types.InlineKeyboardButton("⭐ Отзывы", url=REVIEWS_URL)
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "💬 Поддержка",
-            url="https://t.me/"
-            + SUPPORT_USERNAME
+            url="https://t.me/" + SUPPORT_USERNAME
         )
     )
 
     if is_admin(user_id):
-
         markup.add(
             types.InlineKeyboardButton(
                 "📊 История покупок",
                 callback_data="purchase_history"
             )
         )
-
         markup.add(
             types.InlineKeyboardButton(
                 "🚫 Блокировка",
                 callback_data="block_menu"
             )
         )
-
         markup.add(
             types.InlineKeyboardButton(
                 "💰 Изменить цены",
                 callback_data="prices"
             )
         )
-
         markup.add(
             types.InlineKeyboardButton(
                 "📢 Рассылка",
@@ -692,38 +368,23 @@ def main_menu(user_id):
 # START
 # =========================================================
 
-@bot.message_handler(
-    commands=["start"]
-)
+@bot.message_handler(commands=["start"])
 def start(message):
-
     user_id = message.from_user.id
-
     add_user(user_id)
 
     if is_blocked(user_id):
-
-        bot.send_message(
-            message.chat.id,
-            "🚫 Вы заблокированы."
-        )
-
+        bot.send_message(message.chat.id, "🚫 Вы заблокированы.")
         return
 
     bot.send_message(
         message.chat.id,
-
-        "👋 Привет, "
-        + user_name(message.from_user)
-        + "!\n\n"
+        "👋 Привет, " + username(message.from_user) + "!\n\n"
         "✨ Добро пожаловать в SELL STARS RT!\n\n"
         "⭐ Telegram Stars\n"
         "💎 Telegram Premium\n\n"
         "Выберите нужное действие:",
-
-        reply_markup=main_menu(
-            user_id
-        )
+        reply_markup=main_menu(user_id)
     )
 
 
@@ -731,47 +392,28 @@ def start(message):
 # HOME
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "home"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "home")
 def home(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(call.from_user.id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
-
-    text = (
-        "🏠 ГЛАВНОЕ МЕНЮ\n\n"
-        "Выберите нужное действие:"
-    )
+    bot.answer_callback_query(call.id)
 
     try:
-
         bot.edit_message_text(
-            text,
+            "🏠 Главное меню\n\nВыберите нужное действие:",
             call.message.chat.id,
             call.message.message_id,
-            reply_markup=main_menu(
-                call.from_user.id
-            )
+            reply_markup=main_menu(call.from_user.id)
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
-            text,
-            reply_markup=main_menu(
-                call.from_user.id
-            )
+            "🏠 Главное меню",
+            reply_markup=main_menu(call.from_user.id)
         )
 
 
@@ -779,130 +421,67 @@ def home(call):
 # PROFILE
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "profile"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "profile")
 def profile(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
     user_id = call.from_user.id
 
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
     user_purchases = [
-        item
-        for item in purchases
-        if int(
-            item.get(
-                "user_id",
-                0
-            )
-        ) == user_id
+        x for x in purchases if x.get("user_id") == user_id
     ]
 
-    total_rub = 0
+    total_rub = sum(
+        float(x.get("price_rub", 0)) for x in user_purchases
+    )
 
-    total_stars = 0
+    total_stars = sum(
+        int(x.get("stars", 0))
+        for x in user_purchases
+        if x.get("product") == "Stars"
+    )
 
-    total_premium = 0
-
-    for item in user_purchases:
-
-        total_rub += float(
-            item.get(
-                "price_rub",
-                item.get(
-                    "price",
-                    0
-                )
-            )
-        )
-
-        if item.get(
-            "product"
-        ) == "Stars":
-
-            total_stars += int(
-                item.get(
-                    "stars",
-                    0
-                )
-            )
-
-        elif item.get(
-            "product"
-        ) == "Premium":
-
-            total_premium += int(
-                item.get(
-                    "months",
-                    0
-                )
-            )
-
-    username = (
-        "@"
-        + call.from_user.username
-        if call.from_user.username
-        else "не указан"
+    total_premium = sum(
+        int(x.get("months", 0))
+        for x in user_purchases
+        if x.get("product") == "Premium"
     )
 
     text = (
         "👤 ПРОФИЛЬ\n\n"
-
-        "🆔 ID: "
-        + str(user_id)
-        + "\n"
-
+        f"🆔 ID: {user_id}\n"
         "👤 Username: "
-        + username
+        + (
+            "@" + call.from_user.username
+            if call.from_user.username
+            else "не указан"
+        )
         + "\n\n"
-
-        "⭐ Куплено Stars: "
-        + str(total_stars)
-        + "\n"
-
-        "💎 Куплено Premium: "
-        + str(total_premium)
-        + " мес.\n"
-
-        "💰 Потрачено: "
-        + money(total_rub)
-        + " ₽\n"
-
-        "📦 Покупок: "
-        + str(len(user_purchases))
+        f"⭐ Всего Stars: {total_stars}\n"
+        f"💎 Premium куплено: {total_premium} мес.\n"
+        f"💰 Потрачено: {money(total_rub)} ₽\n"
+        f"📦 Покупок: {len(user_purchases)}"
     )
 
     markup = types.InlineKeyboardMarkup()
-
     markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="home"
-        )
+        types.InlineKeyboardButton("⬅️ Назад", callback_data="home")
     )
 
     try:
-
         bot.edit_message_text(
             text,
             call.message.chat.id,
             call.message.message_id,
             reply_markup=markup
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
             text,
@@ -911,54 +490,28 @@ def profile(call):
 
 
 # =========================================================
-# STARS MENU
+# STARS
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "stars"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "stars")
 def stars(call):
+    user_id = call.from_user.id
 
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=2
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
-    for amount, price_rub in prices[
-        "stars"
-    ].items():
-
-        amount_int = int(
-            amount
-        )
-
-        ton_amount = stars_ton_price(
-            price_rub,
-            amount_int
-        )
-
+    for amount, price_rub in prices["stars"].items():
         markup.add(
             types.InlineKeyboardButton(
-                "⭐ "
-                + amount
-                + " — "
-                + ton(ton_amount)
-                + " TON",
-                callback_data=(
-                    "star_"
-                    + amount
-                )
+                f"⭐ {amount} — {money(price_rub)} ₽",
+                callback_data="star_" + amount
             )
         )
 
@@ -968,35 +521,27 @@ def stars(call):
             callback_data="custom_stars"
         )
     )
-
     markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="home"
-        )
+        types.InlineKeyboardButton("⬅️ Назад", callback_data="home")
     )
 
     text = (
         "⭐ ВЫБЕРИТЕ STARS\n\n"
-        "💎 Оплата в TON\n"
+        "💎 На данный момент доступны способы оплаты: TON и рубли\n"
+        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
         "💱 Курс: 1 TON = "
         + money(TON_RUB_RATE)
-        + " ₽\n\n"
-        "🔥 На все пакеты, кроме 50 Stars, "
-        "скидка 1%"
+        + " ₽"
     )
 
     try:
-
         bot.edit_message_text(
             text,
             call.message.chat.id,
             call.message.message_id,
             reply_markup=markup
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
             text,
@@ -1009,43 +554,30 @@ def stars(call):
 # =========================================================
 
 @bot.callback_query_handler(
-    func=lambda call:
-        call.data.startswith("star_")
+    func=lambda c: c.data.startswith("star_")
 )
 def choose_stars(call):
+    user_id = call.from_user.id
 
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    amount = call.data.split(
-        "_",
-        1
-    )[1]
+    amount = call.data.split("_", 1)[1]
 
     if amount not in prices["stars"]:
-
         bot.answer_callback_query(
-            call.id,
-            "❌ Пакет не найден",
-            show_alert=True
+            call.id, "❌ Такой пакет не найден", show_alert=True
         )
-
         return
 
-    amount_int = int(
-        amount
-    )
-
-    price_rub = float(
-        prices["stars"][amount]
-    )
+    amount_int = int(amount)
+    price_rub = float(prices["stars"][amount])
 
     create_order(
-        call.from_user.id,
+        user_id,
         {
             "product": "Stars",
             "stars": amount_int,
@@ -1054,14 +586,12 @@ def choose_stars(call):
         }
     )
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     show_recipient(
         call.message.chat.id,
         call.message.message_id,
-        call.from_user.id
+        user_id
     )
 
 
@@ -1069,82 +599,57 @@ def choose_stars(call):
 # CUSTOM STARS
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "custom_stars"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "custom_stars")
 def custom_stars(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(call.from_user.id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     msg = bot.send_message(
         call.message.chat.id,
-
-        "✏️ Введите количество Stars.\n\n"
-        "Минимум: 50 Stars."
+        "✏️ Напишите количество Stars.\n\n"
+        "Минимум — 50 Stars.\n"
+        "Цена рассчитывается автоматически."
     )
 
-    bot.register_next_step_handler(
-        msg,
-        custom_stars_amount
-    )
+    bot.register_next_step_handler(msg, custom_stars_amount)
 
 
 def custom_stars_amount(message):
-
     user_id = message.from_user.id
 
     if is_blocked(user_id):
-
         return
 
     if not message.text:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Введите число."
-        )
-
-        return
-
-    try:
-
-        amount = int(
-            message.text.strip()
-        )
-
-    except ValueError:
-
         bot.send_message(
             message.chat.id,
             "❌ Введите количество числом."
         )
+        return
 
+    try:
+        amount = int(message.text.strip())
+    except ValueError:
+        bot.send_message(
+            message.chat.id,
+            "❌ Введите количество числом."
+        )
         return
 
     if amount < 50:
-
         bot.send_message(
             message.chat.id,
             "❌ Минимум — 50 Stars."
         )
-
         return
 
     price_rub = round(
-        amount
-        * float(
-            prices["star_price"]
-        ),
+        amount * float(prices["star_price"]),
         2
     )
 
@@ -1169,73 +674,49 @@ def custom_stars_amount(message):
 # PREMIUM
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "premium"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "premium")
 def premium(call):
+    user_id = call.from_user.id
 
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
-    for months, price_rub in prices[
-        "premium"
-    ].items():
-
-        ton_amount = premium_ton_price(
-            price_rub
-        )
-
+    for months, price_rub in prices["premium"].items():
         markup.add(
             types.InlineKeyboardButton(
-                "💎 "
-                + months
-                + " мес. — "
-                + ton(ton_amount)
-                + " TON",
-                callback_data=(
-                    "premium_"
-                    + months
-                )
+                f"💎 {months} мес. — {money(price_rub)} ₽",
+                callback_data="premium_" + months
             )
         )
 
     markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="home"
-        )
+        types.InlineKeyboardButton("⬅️ Назад", callback_data="home")
     )
 
     text = (
         "💎 TELEGRAM PREMIUM\n\n"
-        "💎 Оплата в TON\n"
-        "🔥 Скидка 1% на Premium"
+        "💎 На данный момент доступны способы оплаты: TON и рубли\n"
+        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
+        "💱 Курс: 1 TON = "
+        + money(TON_RUB_RATE)
+        + " ₽"
     )
 
     try:
-
         bot.edit_message_text(
             text,
             call.message.chat.id,
             call.message.message_id,
             reply_markup=markup
         )
-
     except Exception:
-
         bot.send_message(
             call.message.chat.id,
             text,
@@ -1248,76 +729,56 @@ def premium(call):
 # =========================================================
 
 @bot.callback_query_handler(
-    func=lambda call:
-        call.data.startswith("premium_")
+    func=lambda c: c.data.startswith("premium_")
 )
 def choose_premium(call):
+    user_id = call.from_user.id
 
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    months = call.data.split(
-        "_",
-        1
-    )[1]
+    months = call.data.split("_", 1)[1]
 
     if months not in prices["premium"]:
-
         bot.answer_callback_query(
             call.id,
-            "❌ Вариант не найден",
+            "❌ Такой вариант отсутствует",
             show_alert=True
         )
-
         return
 
-    price_rub = float(
-        prices["premium"][months]
-    )
-
     create_order(
-        call.from_user.id,
+        user_id,
         {
             "product": "Premium",
             "months": int(months),
-            "price_rub": price_rub
+            "price_rub": float(prices["premium"][months])
         }
     )
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     show_recipient(
         call.message.chat.id,
         call.message.message_id,
-        call.from_user.id
-        
+        user_id
     )
-    # =========================================================
+
+
+# =========================================================
 # RECIPIENT
 # =========================================================
 
-def show_recipient(
-    chat_id,
-    message_id,
-    user_id
-):
-
-    order = orders.get(
-        user_id
-    )
+def show_recipient(chat_id, message_id, user_id):
+    order = orders.get(user_id)
 
     if not order:
         return
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
         types.InlineKeyboardButton(
@@ -1325,7 +786,6 @@ def show_recipient(
             callback_data="recipient_self"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "🎁 Другому",
@@ -1333,15 +793,7 @@ def show_recipient(
         )
     )
 
-    if order.get(
-        "product"
-    ) == "Stars":
-
-        back = "stars"
-
-    else:
-
-        back = "premium"
+    back = "stars" if order["product"] == "Stars" else "premium"
 
     markup.add(
         types.InlineKeyboardButton(
@@ -1350,25 +802,17 @@ def show_recipient(
         )
     )
 
-    text = (
-        order_text(order)
-        + "\n\n"
-        "Кому оформить заказ?"
-    )
+    text = order_text(order) + "\n\nКому оформить заказ?"
 
     if message_id is not None:
-
         try:
-
             bot.edit_message_text(
                 text,
                 chat_id,
                 message_id,
                 reply_markup=markup
             )
-
             return
-
         except Exception:
             pass
 
@@ -1379,121 +823,80 @@ def show_recipient(
     )
 
 
-# =========================================================
-# RECIPIENT SELF
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "recipient_self"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "recipient_self")
 def recipient_self(call):
+    user_id = call.from_user.id
 
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(user_id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    order = orders.get(
-        call.from_user.id
-    )
+    order = orders.get(user_id)
 
     if not order:
-
         bot.answer_callback_query(
-            call.id,
-            "❌ Заказ не найден",
-            show_alert=True
+            call.id, "❌ Заказ не найден", show_alert=True
         )
-
         return
 
-    order["recipient"] = user_name(
-        call.from_user
-    )
+    order["recipient"] = username(call.from_user)
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     show_payment(
         call.message.chat.id,
         call.message.message_id,
-        call.from_user.id
+        user_id
     )
 
 
-# =========================================================
-# RECIPIENT OTHER
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "recipient_other"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "recipient_other")
 def recipient_other(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
+    if is_blocked(call.from_user.id):
+        bot.answer_callback_query(
+            call.id, "🚫 Вы заблокированы", show_alert=True
+        )
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     msg = bot.send_message(
         call.message.chat.id,
-
-        "🎁 Введите @username получателя.\n\n"
+        "🎁 Напишите @username получателя.\n\n"
         "Например:\n"
         "@username"
     )
 
-    bot.register_next_step_handler(
-        msg,
-        recipient_other_text
-    )
+    bot.register_next_step_handler(msg, recipient_other_text)
 
 
 def recipient_other_text(message):
-
     user_id = message.from_user.id
 
     if is_blocked(user_id):
-
         return
 
     if not message.text:
-
         bot.send_message(
             message.chat.id,
-            "❌ Введите username."
+            "❌ Укажите username."
         )
-
         return
 
     recipient = message.text.strip()
 
     if not recipient.startswith("@"):
-
         recipient = "@" + recipient
 
-    order = orders.get(
-        user_id
-    )
+    order = orders.get(user_id)
 
     if not order:
-
         bot.send_message(
             message.chat.id,
             "❌ Заказ не найден."
         )
-
         return
 
     order["recipient"] = recipient
@@ -1505,27 +908,9 @@ def recipient_other_text(message):
     )
 
 
-# =========================================================
-# BACK RECIPIENT
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "back_recipient"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "back_recipient")
 def back_recipient(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
+    bot.answer_callback_query(call.id)
     show_recipient(
         call.message.chat.id,
         call.message.message_id,
@@ -1538,10 +923,7 @@ def back_recipient(call):
 # =========================================================
 
 def payment_menu():
-
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
+    markup = types.InlineKeyboardMarkup(row_width=1)
 
     markup.add(
         types.InlineKeyboardButton(
@@ -1549,28 +931,24 @@ def payment_menu():
             callback_data="pay_ton"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "🏦 Сбербанк",
             callback_data="pay_sber"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "💳 СБП",
             callback_data="pay_sbp"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "💰 ЮMoney",
             callback_data="pay_yoomoney"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "⬅️ Назад",
@@ -1581,15 +959,8 @@ def payment_menu():
     return markup
 
 
-def show_payment(
-    chat_id,
-    message_id,
-    user_id
-):
-
-    order = orders.get(
-        user_id
-    )
+def show_payment(chat_id, message_id, user_id):
+    order = orders.get(user_id)
 
     if not order:
         return
@@ -1604,18 +975,14 @@ def show_payment(
     markup = payment_menu()
 
     if message_id is not None:
-
         try:
-
             bot.edit_message_text(
                 text,
                 chat_id,
                 message_id,
                 reply_markup=markup
             )
-
             return
-
         except Exception:
             pass
 
@@ -1630,369 +997,363 @@ def show_payment(
 # TON PAYMENT
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "pay_ton"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "pay_ton")
 def pay_ton(call):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
-        return
-
     user_id = call.from_user.id
-
-    order = orders.get(
-        user_id
-    )
+    order = orders.get(user_id)
 
     if not order:
-
         bot.answer_callback_query(
-            call.id,
-            "❌ Заказ не найден",
-            show_alert=True
+            call.id, "❌ Заказ не найден", show_alert=True
         )
-
         return
 
-    if order.get(
-        "product"
-    ) == "Stars":
-
-        amount = int(
-            order.get(
-                "stars",
-                0
-            )
-        )
-
-        ton_amount = stars_ton_price(
-            order["price_rub"],
-            amount
-        )
-
-    else:
-
-        ton_amount = premium_ton_price(
-            order["price_rub"]
-        )
-
-    order["payment_method"] = "TON"
-
-    order["payment_status"] = (
-        "waiting_payment"
+    ton_amount = ton_payment_price(
+        float(order["price_rub"])
     )
 
+    order["payment_method"] = "TON"
+    order["payment_status"] = "waiting_payment"
     order["ton_amount"] = ton_amount
 
     text = (
         "💎 ОПЛАТА TON\n\n"
         + order_text(order)
         + "\n\n"
+        "🔥 Скидка 1% при оплате TON\n"
         "💎 К оплате: "
         + ton(ton_amount)
         + " TON\n\n"
-        "📋 TON-адрес:\n"
+        "📋 Адрес TON:\n"
         + TON_ADDRESS
         + "\n\n"
-        "⚠️ После перевода отправьте админу "
-        "подтверждение оплаты.\n\n"
+        "⚠️ После перевода сообщите админу об оплате.\n"
         "⏱ Заказ действует 30 минут."
     )
 
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="back_recipient"
-        )
-    )
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    bot.send_message(
-        call.message.chat.id,
-        text,
-        reply_markup=markup
-    )
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, text)
 
 
 # =========================================================
 # BANK / YOOMONEY PAYMENT
 # =========================================================
 
-def send_payment_link(
-    call,
-    title,
-    payment_url
-):
-
-    if check_blocked(
-        call.from_user.id,
-        call.id
-    ):
-
-        return
-
-    order = orders.get(
-        call.from_user.id
-    )
+def send_payment_details(call, details, method):
+    user_id = call.from_user.id
+    order = orders.get(user_id)
 
     if not order:
-
         bot.answer_callback_query(
-            call.id,
-            "❌ Заказ не найден",
-            show_alert=True
+            call.id, "❌ Заказ не найден", show_alert=True
         )
-
         return
 
-    order["payment_method"] = title
+    order["payment_method"] = method
+    order["payment_status"] = "waiting_payment"
 
-    order["payment_status"] = (
-        "waiting_payment"
-    )
+    bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "💳 ОПЛАТИТЬ",
-            url=payment_url
-        )
-    )
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="back_recipient"
-        )
-    )
-
-    text = (
+    bot.send_message(
+        call.message.chat.id,
         "💳 ОПЛАТА\n\n"
         + order_text(order)
         + "\n\n"
         "🏦 Способ: "
-        + title
+        + method
         + "\n\n"
-        "Нажмите кнопку ниже для оплаты.\n\n"
-        "После оплаты отправьте подтверждение "
-        "администратору."
-    )
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    bot.send_message(
-        call.message.chat.id,
-        text,
-        reply_markup=markup
+        "📋 Реквизиты / ссылка:\n"
+        + details
+        + "\n\n"
+        "После оплаты сообщите админу."
     )
 
 
-# =========================================================
-# SBERBANK
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "pay_sber"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "pay_sber")
 def pay_sber(call):
-
-    send_payment_link(
+    send_payment_details(
         call,
-        "Сбербанк",
-        SBER_PAYMENT
+        SBER_DETAILS,
+        "Сбербанк"
     )
 
 
-# =========================================================
-# SBP
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "pay_sbp"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "pay_sbp")
 def pay_sbp(call):
-
-    send_payment_link(
+    send_payment_details(
         call,
-        "СБП",
-        SBP_PAYMENT
+        SBP_DETAILS,
+        "СБП"
     )
 
 
-# =========================================================
-# YOOMONEY
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "pay_yoomoney"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "pay_yoomoney")
 def pay_yoomoney(call):
-
-    send_payment_link(
+    send_payment_details(
         call,
-        "ЮMoney",
-        YOOMONEY_URL
+        YOOMONEY_URL,
+        "ЮMoney"
     )
 
 
 # =========================================================
-# ADMIN PURCHASE HISTORY
+# ADMIN: SET TON RATE
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "purchase_history"
-)
-def purchase_history(call):
+@bot.message_handler(commands=["setton"])
+def setton_command(message):
+    global TON_RUB_RATE
 
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        bot.answer_callback_query(
-            call.id,
-            "❌ Нет доступа",
-            show_alert=True
-        )
-
+    if not is_admin(message.from_user.id):
         return
 
-    bot.answer_callback_query(
-        call.id
+    parts = message.text.split()
+
+    if len(parts) != 2:
+        bot.reply_to(
+            message,
+            "❌ Использование:\n/setton 125"
+        )
+        return
+
+    try:
+        new_rate = float(
+            parts[1].replace(",", ".")
+        )
+    except ValueError:
+        bot.reply_to(
+            message,
+            "❌ Введите число.\nНапример: /setton 130"
+        )
+        return
+
+    if new_rate <= 0:
+        bot.reply_to(
+            message,
+            "❌ Курс должен быть больше 0."
+        )
+        return
+
+    TON_RUB_RATE = new_rate
+    prices["ton_rub_rate"] = new_rate
+    save_prices()
+
+    bot.reply_to(
+        message,
+        "✅ Курс TON изменён\n\n"
+        "💎 1 TON = "
+        + money(new_rate)
+        + " ₽"
     )
 
-    if not purchases:
 
-        text = (
-            "📊 ИСТОРИЯ ПОКУПОК\n\n"
-            "Покупок пока нет."
-        )
+@bot.message_handler(commands=["tonrate"])
+def tonrate_command(message):
+    if not is_admin(message.from_user.id):
+        return
 
-    else:
-
-        recent = purchases[-20:]
-
-        lines = [
-            "📊 ИСТОРИЯ ПОКУПОК",
-            ""
-        ]
-
-        for item in reversed(
-            recent
-        ):
-
-            product = item.get(
-                "product",
-                "?"
-            )
-
-            user_id = item.get(
-                "user_id",
-                "?"
-            )
-
-            price = item.get(
-                "price_rub",
-                item.get(
-                    "price",
-                    0
-                )
-            )
-
-            lines.append(
-                "• "
-                + str(product)
-                + " | ID "
-                + str(user_id)
-                + " | "
-                + money(price)
-                + " ₽"
-            )
-
-        text = "\n".join(
-            lines
-        )
-
-    markup = types.InlineKeyboardMarkup()
-
-    markup.add(
-        types.InlineKeyboardButton(
-            "⬅️ Назад",
-            callback_data="home"
-        )
+    bot.reply_to(
+        message,
+        "💱 Текущий курс:\n"
+        "1 TON = "
+        + money(TON_RUB_RATE)
+        + " ₽\n\n"
+        "Изменить:\n"
+        "/setton 130"
     )
 
-    bot.send_message(
-        call.message.chat.id,
-        text,
-        reply_markup=markup
-    )
-    # =========================================================
-# ADMIN BLOCK MENU
+
+# =========================================================
+# ADMIN: BLOCK / UNBLOCK
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "block_menu"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "block_menu")
 def block_menu(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        bot.answer_callback_query(
-            call.id,
-            "❌ Нет доступа",
-            show_alert=True
-        )
-
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(call.id, "Нет доступа", show_alert=True)
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
-
+    markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton(
-            "🚫 Заблокировать",
+            "🚫 Заблокировать пользователя",
             callback_data="block_user"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
-            "✅ Разблокировать",
+            "✅ Разблокировать пользователя",
             callback_data="unblock_user"
         )
     )
-
     markup.add(
         types.InlineKeyboardButton(
             "📋 Список заблокированных",
             callback_data="blocked_list"
         )
     )
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="home"
+        )
+    )
+
+    try:
+        bot.edit_message_text(
+            "🚫 УПРАВЛЕНИЕ БЛОКИРОВКОЙ",
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup
+        )
+    except Exception:
+        bot.send_message(
+            call.message.chat.id,
+            "🚫 УПРАВЛЕНИЕ БЛОКИРОВКОЙ",
+            reply_markup=markup
+        )
+
+
+@bot.callback_query_handler(func=lambda c: c.data == "block_user")
+def block_user(call):
+    if not is_admin(call.from_user.id):
+        return
+
+    bot.answer_callback_query(call.id)
+
+    msg = bot.send_message(
+        call.message.chat.id,
+        "Введите ID пользователя для блокировки:"
+    )
+    bot.register_next_step_handler(msg, block_user_id)
+
+
+def block_user_id(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = int(message.text.strip())
+    except Exception:
+        bot.send_message(message.chat.id, "❌ ID должен быть числом.")
+        return
+
+    if user_id == ADMIN_ID:
+        bot.send_message(message.chat.id, "❌ Нельзя заблокировать админа.")
+        return
+
+    blocked_users.add(user_id)
+    save_blocked()
+
+    bot.send_message(
+        message.chat.id,
+        f"✅ Пользователь {user_id} заблокирован."
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data == "unblock_user")
+def unblock_user(call):
+    if not is_admin(call.from_user.id):
+        return
+
+    bot.answer_callback_query(call.id)
+
+    msg = bot.send_message(
+        call.message.chat.id,
+        "Введите ID пользователя для разблокировки:"
+    )
+    bot.register_next_step_handler(msg, unblock_user_id)
+
+
+def unblock_user_id(message):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        user_id = int(message.text.strip())
+    except Exception:
+        bot.send_message(message.chat.id, "❌ ID должен быть числом.")
+        return
+
+    if user_id in blocked_users:
+        blocked_users.remove(user_id)
+        save_blocked()
+        bot.send_message(
+            message.chat.id,
+            f"✅ Пользователь {user_id} разблокирован."
+        )
+    else:
+        bot.send_message(
+            message.chat.id,
+            "ℹ️ Этот пользователь не заблокирован."
+        )
+
+
+@bot.callback_query_handler(func=lambda c: c.data == "blocked_list")
+def blocked_list(call):
+    if not is_admin(call.from_user.id):
+        return
+
+    bot.answer_callback_query(call.id)
+
+    if not blocked_users:
+        text = "📋 Заблокированных пользователей нет."
+    else:
+        text = "📋 ЗАБЛОКИРОВАННЫЕ:\n\n"
+        text += "\n".join(str(x) for x in sorted(blocked_users))
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="block_menu"
+        )
+    )
+
+    bot.send_message(
+        call.message.chat.id,
+        text,
+        reply_markup=markup
+    )
+
+
+# =========================================================
+# ADMIN: PRICE MENU
+# =========================================================
+
+@bot.callback_query_handler(func=lambda c: c.data == "prices")
+def prices_menu(call):
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(call.id, "Нет доступа", show_alert=True)
+        return
+
+    bot.answer_callback_query(call.id)
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton(
+            "⭐ Изменить цену 1 Star",
+            callback_data="price_star"
+        )
+    )
+
+    for amount in prices["stars"]:
+        markup.add(
+            types.InlineKeyboardButton(
+                f"⭐ Пакет {amount}",
+                callback_data="price_stars_" + amount
+            )
+        )
+
+    for months in prices["premium"]:
+        markup.add(
+            types.InlineKeyboardButton(
+                f"💎 Premium {months} мес.",
+                callback_data="price_premium_" + months
+            )
+        )
 
     markup.add(
         types.InlineKeyboardButton(
@@ -2003,317 +1364,133 @@ def block_menu(call):
 
     bot.send_message(
         call.message.chat.id,
-
-        "🚫 УПРАВЛЕНИЕ БЛОКИРОВКАМИ\n\n"
-        "Выберите действие:",
-
+        "💰 ИЗМЕНЕНИЕ ЦЕН",
         reply_markup=markup
     )
 
 
-# =========================================================
-# BLOCK USER
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "block_user"
-)
-def block_user(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
+def ask_new_price(call, kind, key):
+    if not is_admin(call.from_user.id):
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
-
-    block_waiting.add(
-        call.from_user.id
-    )
+    bot.answer_callback_query(call.id)
 
     msg = bot.send_message(
         call.message.chat.id,
-
-        "🚫 Введите Telegram ID пользователя,\n"
-        "которого нужно заблокировать."
+        "Введите новую цену в рублях:"
     )
-
     bot.register_next_step_handler(
         msg,
-        block_user_id
+        set_price_value,
+        kind,
+        key
     )
 
 
-def block_user_id(message):
+@bot.callback_query_handler(func=lambda c: c.data == "price_star")
+def price_star(call):
+    ask_new_price(call, "star_price", None)
 
-    admin_id = message.from_user.id
 
-    if not is_admin(admin_id):
-
+@bot.callback_query_handler(
+    func=lambda c: c.data.startswith("price_stars_")
+)
+def price_stars(call):
+    key = call.data.split("_", 2)[2]
+    if key not in prices["stars"]:
         return
+    ask_new_price(call, "stars", key)
 
-    block_waiting.discard(
-        admin_id
-    )
+
+@bot.callback_query_handler(
+    func=lambda c: c.data.startswith("price_premium_")
+)
+def price_premium(call):
+    key = call.data.split("_", 2)[2]
+    if key not in prices["premium"]:
+        return
+    ask_new_price(call, "premium", key)
+
+
+def set_price_value(message, kind, key):
+    if not is_admin(message.from_user.id):
+        return
 
     try:
-
-        user_id = int(
-            message.text.strip()
+        value = float(
+            message.text.strip().replace(",", ".")
         )
-
     except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ ID должен состоять из цифр."
-        )
-
+        bot.send_message(message.chat.id, "❌ Цена должна быть числом.")
         return
 
-    if user_id == ADMIN_ID:
-
+    if value <= 0:
         bot.send_message(
             message.chat.id,
-            "❌ Нельзя заблокировать администратора."
+            "❌ Цена должна быть больше 0."
         )
-
         return
 
-    blocked_users.add(
-        user_id
-    )
+    if kind == "star_price":
+        prices["star_price"] = value
+        label = "1 Star"
+    elif kind == "stars":
+        prices["stars"][key] = value
+        label = f"{key} Stars"
+    else:
+        prices["premium"][key] = value
+        label = f"Premium {key} мес."
 
-    save_blocked()
+    save_prices()
 
     bot.send_message(
         message.chat.id,
-
-        "🚫 Пользователь "
-        + str(user_id)
-        + " заблокирован."
-    )
-
-
-# =========================================================
-# UNBLOCK USER
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "unblock_user"
-)
-def unblock_user(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    msg = bot.send_message(
-        call.message.chat.id,
-
-        "✅ Введите Telegram ID пользователя,\n"
-        "которого нужно разблокировать."
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        unblock_user_id
-    )
-
-
-def unblock_user_id(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    try:
-
-        user_id = int(
-            message.text.strip()
-        )
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ ID должен состоять из цифр."
-        )
-
-        return
-
-    if user_id in blocked_users:
-
-        blocked_users.remove(
-            user_id
-        )
-
-        save_blocked()
-
-        bot.send_message(
-            message.chat.id,
-
-            "✅ Пользователь "
-            + str(user_id)
-            + " разблокирован."
-        )
-
-    else:
-
-        bot.send_message(
-            message.chat.id,
-            "ℹ️ Этот пользователь не заблокирован."
-        )
-
-
-# =========================================================
-# BLOCKED LIST
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "blocked_list"
-)
-def blocked_list(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    if not blocked_users:
-
-        text = (
-            "📋 Заблокированных пользователей нет."
-        )
-
-    else:
-
-        text = (
-            "📋 ЗАБЛОКИРОВАННЫЕ:\n\n"
-            + "\n".join(
-                "🚫 " + str(user_id)
-                for user_id in sorted(
-                    blocked_users
-                )
-            )
-        )
-
-    bot.send_message(
-        call.message.chat.id,
-        text
-    )
-
-
-# =========================================================
-# ADMIN PRICES
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "prices"
-)
-def prices_menu(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    text = (
-        "💰 ИЗМЕНЕНИЕ ЦЕН\n\n"
-
-        "⭐ Текущая цена Stars: "
-        + money(
-            prices["star_price"]
-        )
-        + " ₽/шт\n\n"
-
-        "⭐ 50: "
-        + money(prices["stars"]["50"])
-        + " ₽\n"
-
-        "⭐ 100: "
-        + money(prices["stars"]["100"])
-        + " ₽\n"
-
-        "⭐ 150: "
-        + money(prices["stars"]["150"])
-        + " ₽\n"
-
-        "⭐ 250: "
-        + money(prices["stars"]["250"])
-        + " ₽\n"
-
-        "⭐ 500: "
-        + money(prices["stars"]["500"])
-        + " ₽\n"
-
-        "⭐ 1000: "
-        + money(prices["stars"]["1000"])
-        + " ₽\n\n"
-
-        "💎 Premium 3: "
-        + money(prices["premium"]["3"])
-        + " ₽\n"
-
-        "💎 Premium 6: "
-        + money(prices["premium"]["6"])
-        + " ₽\n"
-
-        "💎 Premium 12: "
-        + money(prices["premium"]["12"])
+        "✅ Цена изменена\n\n"
+        + label
+        + ": "
+        + money(value)
         + " ₽"
     )
 
-    markup = types.InlineKeyboardMarkup(
-        row_width=1
-    )
 
-    markup.add(
-        types.InlineKeyboardButton(
-            "⭐ Цена Stars за 1 шт.",
-            callback_data="price_star"
-        )
-    )
+# =========================================================
+# ADMIN: PURCHASE HISTORY
+# =========================================================
 
-    markup.add(
-        types.InlineKeyboardButton(
-            "⭐ Пакеты Stars",
-            callback_data="price_stars"
-        )
-    )
+@bot.callback_query_handler(
+    func=lambda c: c.data == "purchase_history"
+)
+def purchase_history(call):
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(call.id, "Нет доступа", show_alert=True)
+        return
 
-    markup.add(
-        types.InlineKeyboardButton(
-            "💎 Premium",
-            callback_data="price_premium"
-        )
-    )
+    bot.answer_callback_query(call.id)
 
+    if not purchases:
+        text = "📊 История покупок пока пустая."
+    else:
+        recent = purchases[-20:]
+        lines = ["📊 ПОСЛЕДНИЕ ПОКУПКИ\n"]
+
+        for item in reversed(recent):
+            product = item.get("product", "—")
+            user_id = item.get("user_id", "—")
+            price = money(item.get("price_rub", 0))
+            method = item.get("payment_method", "—")
+
+            if product == "Stars":
+                product_name = f"⭐ {item.get('stars', 0)} Stars"
+            else:
+                product_name = f"💎 Premium {item.get('months', 0)} мес."
+
+            lines.append(
+                f"{product_name} | {price} ₽ | {method} | ID {user_id}"
+            )
+
+        text = "\n".join(lines)
+
+    markup = types.InlineKeyboardMarkup()
     markup.add(
         types.InlineKeyboardButton(
             "⬅️ Назад",
@@ -2329,563 +1506,63 @@ def prices_menu(call):
 
 
 # =========================================================
-# CHANGE STAR PRICE
+# ADMIN: BROADCAST
 # =========================================================
 
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "price_star"
-)
-def price_star(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    msg = bot.send_message(
-        call.message.chat.id,
-        "⭐ Введите новую цену Stars за 1 шт. в ₽:"
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        save_star_price
-    )
-
-
-def save_star_price(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    try:
-
-        value = float(
-            message.text.replace(
-                ",",
-                "."
-            ).strip()
-        )
-
-        if value <= 0:
-            raise ValueError
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Неверная цена."
-        )
-
-        return
-
-    prices["star_price"] = value
-
-    save_prices()
-
-    bot.send_message(
-        message.chat.id,
-
-        "✅ Цена Stars изменена на "
-        + money(value)
-        + " ₽."
-    )
-
-
-# =========================================================
-# CHANGE STAR PACK
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "price_stars"
-)
-def price_stars(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    msg = bot.send_message(
-        call.message.chat.id,
-
-        "⭐ Введите пакет и цену через пробел.\n\n"
-        "Например:\n"
-        "100 150"
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        save_star_pack
-    )
-
-
-def save_star_pack(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 2:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Формат: 100 150"
-        )
-
-        return
-
-    amount = parts[0]
-
-    try:
-
-        price = float(
-            parts[1].replace(
-                ",",
-                "."
-            )
-        )
-
-        if (
-            int(amount) <= 0
-            or price <= 0
-        ):
-
-            raise ValueError
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Неверные данные."
-        )
-
-        return
-
-    if amount not in prices["stars"]:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Такого пакета нет."
-        )
-
-        return
-
-    prices["stars"][amount] = price
-
-    save_prices()
-
-    bot.send_message(
-        message.chat.id,
-
-        "✅ Цена "
-        + amount
-        + " Stars изменена на "
-        + money(price)
-        + " ₽."
-    )
-
-
-# =========================================================
-# CHANGE PREMIUM
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "price_premium"
-)
-def price_premium(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
-        return
-
-    bot.answer_callback_query(
-        call.id
-    )
-
-    msg = bot.send_message(
-        call.message.chat.id,
-
-        "💎 Введите срок и цену через пробел.\n\n"
-        "Например:\n"
-        "3 1100"
-    )
-
-    bot.register_next_step_handler(
-        msg,
-        save_premium_price
-    )
-
-
-def save_premium_price(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 2:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Формат: 3 1100"
-        )
-
-        return
-
-    months = parts[0]
-
-    try:
-
-        price = float(
-            parts[1].replace(
-                ",",
-                "."
-            )
-        )
-
-        if (
-            int(months) <= 0
-            or price <= 0
-        ):
-
-            raise ValueError
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Неверные данные."
-        )
-
-        return
-
-    if months not in prices["premium"]:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Такого срока нет."
-        )
-
-        return
-
-    prices["premium"][months] = price
-
-    save_prices()
-
-    bot.send_message(
-        message.chat.id,
-
-        "✅ Premium "
-        + months
-        + " мес. теперь стоит "
-        + money(price)
-        + " ₽."
-    )
-
-
-# =========================================================
-# BROADCAST
-# =========================================================
-
-@bot.callback_query_handler(
-    func=lambda call:
-        call.data == "broadcast"
-)
+@bot.callback_query_handler(func=lambda c: c.data == "broadcast")
 def broadcast(call):
-
-    if not is_admin(
-        call.from_user.id
-    ):
-
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(call.id, "Нет доступа", show_alert=True)
         return
 
-    bot.answer_callback_query(
-        call.id
-    )
+    bot.answer_callback_query(call.id)
 
     msg = bot.send_message(
         call.message.chat.id,
-
-        "📢 Отправьте сообщение для рассылки.\n\n"
-        "Текст, фото или другое сообщение."
+        "📢 Отправьте сообщение для рассылки."
     )
-
-    bot.register_next_step_handler(
-        msg,
-        broadcast_message
-    )
+    bot.register_next_step_handler(msg, do_broadcast)
 
 
-def broadcast_message(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
+def do_broadcast(message):
+    if not is_admin(message.from_user.id):
         return
 
-    success = 0
-
+    sent = 0
     failed = 0
 
     for user_id in list(users):
-
-        if is_blocked(user_id):
-            continue
-
         try:
-
             bot.copy_message(
                 user_id,
                 message.chat.id,
                 message.message_id
             )
-
-            success += 1
-
-            time.sleep(0.05)
-
+            sent += 1
         except Exception:
-
             failed += 1
 
     bot.send_message(
         message.chat.id,
-
-        "📢 Рассылка завершена.\n\n"
-        "✅ Отправлено: "
-        + str(success)
-        + "\n"
-        "❌ Ошибок: "
-        + str(failed)
+        f"📢 Рассылка завершена.\n\n"
+        f"✅ Отправлено: {sent}\n"
+        f"❌ Ошибок: {failed}"
     )
 
 
 # =========================================================
-# ADMIN COMMANDS
+# RUN
 # =========================================================
 
-@bot.message_handler(
-    commands=["admin"]
-)
-def admin_command(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    bot.send_message(
-        message.chat.id,
-
-        "🔧 АДМИН-ПАНЕЛЬ",
-
-        reply_markup=main_menu(
-            message.from_user.id
-        )
-    )
-
-
-@bot.message_handler(
-    commands=["block"]
-)
-def block_command(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 2:
-
-        bot.send_message(
-            message.chat.id,
-            "Использование: /block ID"
-        )
-
-        return
-
-    try:
-
-        user_id = int(
-            parts[1]
-        )
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Неверный ID."
-        )
-
-        return
-
-    if user_id == ADMIN_ID:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Нельзя заблокировать администратора."
-        )
-
-        return
-
-    blocked_users.add(
-        user_id
-    )
-
-    save_blocked()
-
-    bot.send_message(
-        message.chat.id,
-
-        "🚫 Пользователь "
-        + str(user_id)
-        + " заблокирован."
-    )
-
-
-@bot.message_handler(
-    commands=["unblock"]
-)
-def unblock_command(message):
-
-    if not is_admin(
-        message.from_user.id
-    ):
-
-        return
-
-    parts = message.text.split()
-
-    if len(parts) != 2:
-
-        bot.send_message(
-            message.chat.id,
-            "Использование: /unblock ID"
-        )
-
-        return
-
-    try:
-
-        user_id = int(
-            parts[1]
-        )
-
-    except Exception:
-
-        bot.send_message(
-            message.chat.id,
-            "❌ Неверный ID."
-        )
-
-        return
-
-    blocked_users.discard(
-        user_id
-    )
-
-    save_blocked()
-
-    bot.send_message(
-        message.chat.id,
-
-        "✅ Пользователь "
-        + str(user_id)
-        + " разблокирован."
-    )
-
-
-# =========================================================
-# FALLBACK
-# =========================================================
-
-@bot.message_handler(
-    content_types=[
-        "text",
-        "photo",
-        "document",
-        "video",
-        "audio",
-        "voice"
-    ]
-)
-def other_messages(message):
-
-    if is_blocked(
-        message.from_user.id
-    ):
-
-        return
-
-    if message.text and message.text.startswith("/"):
-        return
-
-    bot.send_message(
-        message.chat.id,
-
-        "🏠 Используйте меню ниже:",
-
-        reply_markup=main_menu(
-            message.from_user.id
-        )
-    )
-
-
-# =========================================================
-# START BOT
-# =========================================================
-
-print(
-    "SELL STARS RT запущен"
-)
-
+print("SELL STARS RT запущен")
 
 while True:
-
     try:
-
         bot.infinity_polling(
             skip_pending=True,
             timeout=30,
             long_polling_timeout=30
         )
-
-    except Exception as error:
-
-        print(
-            "Ошибка бота:",
-            error
-        )
-
+    except Exception as e:
+        print("Ошибка бота:", e)
         time.sleep(5)
