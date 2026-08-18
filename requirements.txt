@@ -1,2 +1,3 @@
 pyTelegramBotAPI
 requests
+telethon==1.44.0
