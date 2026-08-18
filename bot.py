@@ -401,7 +401,7 @@ def stars(call):
     text = (
         "⭐ ВЫБЕРИТЕ STARS\n\n"
         "💳 На данный момент доступны оплаты TON и рублями\n"
-        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
+        "🇺🇦 В скором времени будут доступны различные валюты для оплаты!\n\n"
         f"💱 Курс: 1 TON = {money(TON_RUB_RATE)} ₽"
     )
     if not safe_edit(call.message.chat.id, call.message.message_id, text, markup):
