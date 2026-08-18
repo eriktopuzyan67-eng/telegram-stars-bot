@@ -2,19 +2,34 @@ import os
 import json
 import time
 import threading
+import hashlib
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs
 
 import telebot
 from telebot import types
 
 
 # =========================================================
-# RENDER SERVER
+# RENDER SERVER + YOOMONEY NOTIFICATIONS
 # =========================================================
 
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        if self.path == "/health":
+            self.send_response(200)
+            self.send_header(
+                "Content-Type",
+                "text/plain; charset=utf-8"
+            )
+            self.end_headers()
+            self.wfile.write(
+                b"SELL STARS RT is running"
+            )
+            return
+
         self.send_response(200)
         self.send_header(
             "Content-Type",
@@ -26,50 +41,83 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def do_POST(self):
+
         if self.path != "/yoomoney":
             self.send_response(404)
             self.end_headers()
             return
 
-        length = int(
-            self.headers.get("Content-Length", 0)
-        )
+        try:
+            length = int(
+                self.headers.get(
+                    "Content-Length",
+                    0
+                )
+            )
 
-        body = self.rfile.read(
-            length
-        ).decode("utf-8")
+            body = self.rfile.read(
+                length
+            ).decode(
+                "utf-8",
+                errors="replace"
+            )
 
-        from urllib.parse import parse_qs
+            data = {
+                key: values[0]
+                for key, values in parse_qs(
+                    body,
+                    keep_blank_values=True
+                ).items()
+            }
 
-        data = {
-            key: values[0]
-            for key, values in parse_qs(
-                body,
-                keep_blank_values=True
-            ).items()
-        }
+            print(
+                "YooMoney notification:",
+                data
+            )
 
-        print(
-            "YooMoney notification:",
-            data
-        )
+            # Сохраняем входящий платёж
+            save_yoomoney_payment(data)
 
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
+            self.send_response(200)
+            self.send_header(
+                "Content-Type",
+                "text/plain; charset=utf-8"
+            )
+            self.end_headers()
+            self.wfile.write(b"OK")
+
+        except Exception as e:
+
+            print(
+                "Ошибка YooMoney notification:",
+                e
+            )
+
+            self.send_response(500)
+            self.end_headers()
 
     def log_message(self, format, *args):
         pass
 
+
 def run_server():
-    port = int(os.environ.get("PORT", "10000"))
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            "10000"
+        )
+    )
 
     server = HTTPServer(
         ("0.0.0.0", port),
         Handler
     )
 
-    print("Web server started on port", port)
+    print(
+        "Web server started on port",
+        port
+    )
 
     server.serve_forever()
 
@@ -91,16 +139,31 @@ if not BOT_TOKEN:
         "BOT_TOKEN не найден. Добавь BOT_TOKEN в Render Environment."
     )
 
+
 ADMIN_ID = 6189064599
 
 SUPPORT_USERNAME = "RtSupp_bot"
 
-# РЕКВИЗИТЫ
-SBER_DETAILS = "https://yoomoney.ru/to/4100119601496891"
-SBP_DETAILS = "https://yoomoney.ru/to/4100119601496891"
+
+SBER_DETAILS = (
+    "https://yoomoney.ru/to/4100119601496891"
+)
+
+SBP_DETAILS = (
+    "https://yoomoney.ru/to/4100119601496891"
+)
+
 
 PRICES_FILE = "prices.json"
 USERS_FILE = "users.json"
+PAYMENTS_FILE = "payments.json"
+
+
+# Секрет YooMoney для проверки SHA1
+YOOMONEY_NOTIFICATION_SECRET = os.environ.get(
+    "YOOMONEY_NOTIFICATION_SECRET",
+    ""
+)
 
 
 # =========================================================
@@ -108,6 +171,7 @@ USERS_FILE = "users.json"
 # =========================================================
 
 DEFAULT_PRICES = {
+
     "star_price": 1.50,
 
     "stars": {
@@ -142,12 +206,332 @@ bot = telebot.TeleBot(
 # =========================================================
 
 orders = {}
+
 users = set()
 
 waiting_receipt = set()
+
 waiting_review = set()
+
 broadcast_waiting = set()
+
 price_waiting = {}
+
+
+# =========================================================
+# PAYMENTS
+# =========================================================
+
+payments = []
+
+
+def load_payments():
+
+    global payments
+
+    try:
+
+        with open(
+            PAYMENTS_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+            if isinstance(data, list):
+                payments = data
+            else:
+                payments = []
+
+    except Exception:
+
+        payments = []
+
+        try:
+
+            with open(
+                PAYMENTS_FILE,
+                "w",
+                encoding="utf-8"
+            ) as f:
+
+                json.dump(
+                    [],
+                    f,
+                    ensure_ascii=False,
+                    indent=4
+                )
+
+        except Exception as e:
+
+            print(
+                "Ошибка создания payments.json:",
+                e
+            )
+
+
+def save_payments():
+
+    try:
+
+        temp_file = PAYMENTS_FILE + ".tmp"
+
+        with open(
+            temp_file,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                payments,
+                f,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        os.replace(
+            temp_file,
+            PAYMENTS_FILE
+        )
+
+    except Exception as e:
+
+        print(
+            "Ошибка сохранения payments.json:",
+            e
+        )
+
+
+def verify_yoomoney_notification(data):
+
+    """
+    Проверка подписи YooMoney.
+
+    Если секрет не указан, уведомление всё равно сохраняется,
+    но verified будет False.
+    """
+
+    secret = YOOMONEY_NOTIFICATION_SECRET
+
+    if not secret:
+        return False
+
+    required = [
+        "notification_type",
+        "operation_id",
+        "amount",
+        "currency",
+        "datetime",
+        "sender",
+        "codepro",
+        "label"
+    ]
+
+    for key in required:
+
+        if key not in data:
+            return False
+
+    source = "&".join([
+        data.get("notification_type", ""),
+        data.get("operation_id", ""),
+        data.get("amount", ""),
+        data.get("currency", ""),
+        data.get("datetime", ""),
+        data.get("sender", ""),
+        data.get("codepro", ""),
+        secret,
+        data.get("label", "")
+    ])
+
+    calculated_hash = hashlib.sha1(
+        source.encode("utf-8")
+    ).hexdigest()
+
+    received_hash = data.get(
+        "sha1_hash",
+        ""
+    ).lower()
+
+    return calculated_hash == received_hash
+
+
+def save_yoomoney_payment(data):
+
+    """
+    Сохраняет входящее уведомление YooMoney.
+
+    Повтор одного operation_id не создаёт новый платёж.
+    """
+
+    operation_id = data.get(
+        "operation_id",
+        ""
+    )
+
+    # Если operation_id уже есть —
+    # это повторное уведомление.
+    if operation_id:
+
+        for payment in payments:
+
+            if payment.get(
+                "operation_id"
+            ) == operation_id:
+
+                print(
+                    "Дубликат платежа:",
+                    operation_id
+                )
+
+                return False
+
+    verified = verify_yoomoney_notification(
+        data
+    )
+
+    now = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    payment = {
+
+        "id": len(payments) + 1,
+
+        "operation_id": operation_id,
+
+        "amount": data.get(
+            "amount",
+            ""
+        ),
+
+        "currency": data.get(
+            "currency",
+            ""
+        ),
+
+        "datetime": data.get(
+            "datetime",
+            ""
+        ),
+
+        "received_at": now,
+
+        "sender": data.get(
+            "sender",
+            ""
+        ),
+
+        "label": data.get(
+            "label",
+            ""
+        ),
+
+        "notification_type": data.get(
+            "notification_type",
+            ""
+        ),
+
+        "codepro": data.get(
+            "codepro",
+            ""
+        ),
+
+        "sha1_hash": data.get(
+            "sha1_hash",
+            ""
+        ),
+
+        "verified": verified,
+
+        "status": (
+            "verified"
+            if verified
+            else "unverified"
+        )
+    }
+
+    payments.append(
+        payment
+    )
+
+    save_payments()
+
+    print(
+        "Платёж сохранён:",
+        payment
+    )
+
+    # Сообщаем админу о новом входящем платеже
+    try:
+
+        amount = payment["amount"]
+        currency = payment["currency"]
+
+        verification = (
+            "✅ Подпись подтверждена"
+            if verified
+            else "⚠️ Подпись НЕ подтверждена"
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+
+            "💰 НОВЫЙ ВХОДЯЩИЙ ПЛАТЁЖ\n\n"
+
+            "🆔 ID записи: "
+            + str(payment["id"])
+            + "\n"
+
+            "🔑 Operation ID: "
+            + (
+                operation_id
+                if operation_id
+                else "не указан"
+            )
+            + "\n"
+
+            "💵 Сумма: "
+            + amount
+            + " "
+            + currency
+            + "\n"
+
+            "👤 Отправитель: "
+            + (
+                payment["sender"]
+                if payment["sender"]
+                else "не указан"
+            )
+            + "\n"
+
+            "🏷 Label: "
+            + (
+                payment["label"]
+                if payment["label"]
+                else "не указан"
+            )
+            + "\n\n"
+
+            + verification
+            + "\n"
+
+            "🕐 Получено: "
+            + now
+        )
+
+    except Exception as e:
+
+        print(
+            "Не удалось уведомить админа о платеже:",
+            e
+        )
+
+    return True
+
+
+load_payments()
 
 
 # =========================================================
@@ -155,63 +539,99 @@ price_waiting = {}
 # =========================================================
 
 def money(value):
+
     value = float(value)
 
     if value.is_integer():
         return str(int(value))
 
-    return str(round(value, 2)).replace(".", ",")
+    return str(
+        round(
+            value,
+            2
+        )
+    ).replace(
+        ".",
+        ","
+    )
 
 
 def save_prices():
+
     try:
+
         with open(
             PRICES_FILE,
             "w",
             encoding="utf-8"
         ) as f:
+
             json.dump(
                 prices,
                 f,
                 ensure_ascii=False,
                 indent=4
             )
+
     except Exception as e:
-        print("Ошибка сохранения цен:", e)
+
+        print(
+            "Ошибка сохранения цен:",
+            e
+        )
 
 
 def load_prices():
 
     try:
+
         with open(
             PRICES_FILE,
             "r",
             encoding="utf-8"
         ) as f:
+
             data = json.load(f)
 
         result = {
+
             "star_price": float(
                 data.get(
                     "star_price",
-                    DEFAULT_PRICES["star_price"]
+                    DEFAULT_PRICES[
+                        "star_price"
+                    ]
                 )
             ),
+
             "stars": {},
+
             "premium": {}
         }
 
-        for amount, default in DEFAULT_PRICES["stars"].items():
+        for amount, default in (
+            DEFAULT_PRICES["stars"].items()
+        ):
+
             result["stars"][amount] = float(
-                data.get("stars", {}).get(
+                data.get(
+                    "stars",
+                    {}
+                ).get(
                     amount,
                     default
                 )
             )
 
-        for months, default in DEFAULT_PRICES["premium"].items():
+        for months, default in (
+            DEFAULT_PRICES["premium"].items()
+        ):
+
             result["premium"][months] = float(
-                data.get("premium", {}).get(
+                data.get(
+                    "premium",
+                    {}
+                ).get(
                     months,
                     default
                 )
@@ -220,26 +640,46 @@ def load_prices():
         return result
 
     except Exception:
+
         data = {
-            "star_price": DEFAULT_PRICES["star_price"],
-            "stars": DEFAULT_PRICES["stars"].copy(),
-            "premium": DEFAULT_PRICES["premium"].copy()
+
+            "star_price":
+                DEFAULT_PRICES[
+                    "star_price"
+                ],
+
+            "stars":
+                DEFAULT_PRICES[
+                    "stars"
+                ].copy(),
+
+            "premium":
+                DEFAULT_PRICES[
+                    "premium"
+                ].copy()
         }
 
         try:
+
             with open(
                 PRICES_FILE,
                 "w",
                 encoding="utf-8"
             ) as f:
+
                 json.dump(
                     data,
                     f,
                     ensure_ascii=False,
                     indent=4
                 )
+
         except Exception as e:
-            print("Ошибка создания prices.json:", e)
+
+            print(
+                "Ошибка создания prices.json:",
+                e
+            )
 
         return data
 
@@ -252,30 +692,39 @@ prices = load_prices()
 # =========================================================
 
 def load_users():
+
     global users
 
     try:
+
         with open(
             USERS_FILE,
             "r",
             encoding="utf-8"
         ) as f:
+
             data = json.load(f)
 
-        users = set(int(x) for x in data)
+        users = set(
+            int(x)
+            for x in data
+        )
 
     except Exception:
+
         users = set()
 
 
 def save_users():
 
     try:
+
         with open(
             USERS_FILE,
             "w",
             encoding="utf-8"
         ) as f:
+
             json.dump(
                 list(users),
                 f,
@@ -283,13 +732,21 @@ def save_users():
             )
 
     except Exception as e:
-        print("Ошибка users.json:", e)
+
+        print(
+            "Ошибка users.json:",
+            e
+        )
 
 
 def add_user(user_id):
 
     if user_id not in users:
-        users.add(user_id)
+
+        users.add(
+            user_id
+        )
+
         save_users()
 
 
@@ -301,37 +758,55 @@ load_users()
 # =========================================================
 
 def is_admin(user_id):
+
     return user_id == ADMIN_ID
 
 
 def username(user):
 
     if user.username:
+
         return "@" + user.username
 
-    return "ID " + str(user.id)
+    return "ID " + str(
+        user.id
+    )
 
 
 def order_text(order):
 
     if order["product"] == "Stars":
+
         product = (
             "⭐ Stars: "
-            + str(order["amount"])
+            + str(
+                order["amount"]
+            )
         )
+
     else:
+
         product = (
             "💎 Premium: "
-            + str(order["months"])
+            + str(
+                order["months"]
+            )
             + " месяцев"
         )
 
     return (
         product
+
         + "\n🎁 Получатель: "
-        + order.get("recipient", "не указан")
+        + order.get(
+            "recipient",
+            "не указан"
+        )
+
         + "\n💰 Сумма: "
-        + money(order["price"])
+        + money(
+            order["price"]
+        )
         + " ₽"
     )
 
@@ -370,7 +845,8 @@ def main_menu(user_id):
     markup.add(
         types.InlineKeyboardButton(
             "💬 Поддержка",
-            url="https://t.me/" + SUPPORT_USERNAME
+            url="https://t.me/"
+            + SUPPORT_USERNAME
         )
     )
 
@@ -390,15 +866,30 @@ def main_menu(user_id):
             )
         )
 
+        markup.add(
+            types.InlineKeyboardButton(
+                "💳 История платежей",
+                callback_data="payment_history"
+            )
+        )
+
     return markup
 
 
-def send_home(chat_id, user_id):
+def send_home(
+    chat_id,
+    user_id
+):
 
     bot.send_message(
         chat_id,
-        "🏠 Главное меню\n\nВыберите нужное действие:",
-        reply_markup=main_menu(user_id)
+
+        "🏠 Главное меню\n\n"
+        "Выберите нужное действие:",
+
+        reply_markup=main_menu(
+            user_id
+        )
     )
 
 
@@ -406,11 +897,18 @@ def send_home(chat_id, user_id):
 # ORDER
 # =========================================================
 
-def create_order(user_id, data):
+def create_order(
+    user_id,
+    data
+):
 
     data["created_at"] = time.time()
+
     data["expired"] = False
+
     data["confirmed"] = False
+
+    data["payment_status"] = "new"
 
     orders[user_id] = data
 
@@ -455,14 +953,18 @@ def show_payment(
     user_id
 ):
 
-    order = orders.get(user_id)
+    order = orders.get(
+        user_id
+    )
 
     if not order:
         return
 
     text = (
         "💳 Оплата заказа\n\n"
+
         + order_text(order)
+
         + "\n\n"
         "Выберите способ оплаты:"
     )
@@ -470,13 +972,16 @@ def show_payment(
     if message_id is not None:
 
         try:
+
             bot.edit_message_text(
                 text,
                 chat_id,
                 message_id,
                 reply_markup=payment_menu()
             )
+
             return
+
         except Exception:
             pass
 
@@ -491,30 +996,55 @@ def show_payment(
 # START
 # =========================================================
 
-@bot.message_handler(commands=["start"])
+@bot.message_handler(
+    commands=["start"]
+)
 def start(message):
 
     user_id = message.from_user.id
 
-    add_user(user_id)
+    add_user(
+        user_id
+    )
 
-    waiting_receipt.discard(user_id)
-    waiting_review.discard(user_id)
-    broadcast_waiting.discard(user_id)
-    price_waiting.pop(user_id, None)
+    waiting_receipt.discard(
+        user_id
+    )
+
+    waiting_review.discard(
+        user_id
+    )
+
+    broadcast_waiting.discard(
+        user_id
+    )
+
+    price_waiting.pop(
+        user_id,
+        None
+    )
 
     bot.send_message(
+
         message.chat.id,
 
         "👋 Привет, "
-        + username(message.from_user)
+        + username(
+            message.from_user
+        )
         + "!\n\n"
-        "✨ Добро пожаловать в SELL STARS RT!\n\n"
+
+        "✨ Добро пожаловать "
+        "в SELL STARS RT!\n\n"
+
         "⭐ Telegram Stars\n"
         "💎 Telegram Premium\n\n"
+
         "Выберите нужное действие:",
 
-        reply_markup=main_menu(user_id)
+        reply_markup=main_menu(
+            user_id
+        )
     )
 
 
@@ -523,11 +1053,14 @@ def start(message):
 # =========================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "home"
+    func=lambda c:
+        c.data == "home"
 )
 def home(call):
 
-    bot.answer_callback_query(call.id)
+    bot.answer_callback_query(
+        call.id
+    )
 
     send_home(
         call.message.chat.id,
@@ -540,26 +1073,34 @@ def home(call):
 # =========================================================
 
 @bot.callback_query_handler(
-    func=lambda c: c.data == "stars"
+    func=lambda c:
+        c.data == "stars"
 )
 def stars(call):
 
-    bot.answer_callback_query(call.id)
+    bot.answer_callback_query(
+        call.id
+    )
 
     markup = types.InlineKeyboardMarkup(
         row_width=2
     )
 
-    for amount, price in prices["stars"].items():
+    for amount, price in (
+        prices["stars"].items()
+    ):
 
         markup.add(
             types.InlineKeyboardButton(
+
                 "⭐ "
                 + amount
                 + " — "
                 + money(price)
                 + " ₽",
-                callback_data="star_" + amount
+
+                callback_data=
+                "star_" + amount
             )
         )
 
@@ -576,7 +1117,6 @@ def stars(call):
             callback_data="home"
         )
     )
-
     try:
         bot.edit_message_text(
             "⭐ Выберите количество Stars:",
@@ -592,38 +1132,6 @@ def stars(call):
         )
 
 
-@bot.callback_query_handler(
-    func=lambda c: c.data.startswith("star_")
-)
-def choose_stars(call):
-
-    amount = call.data.split("_", 1)[1]
-
-    if amount not in prices["stars"]:
-        bot.answer_callback_query(
-            call.id,
-            "❌ Такой пакет отсутствует"
-        )
-        return
-
-    create_order(
-        call.from_user.id,
-        {
-            "product": "Stars",
-            "amount": int(amount),
-            "price": prices["stars"][amount]
-        }
-    )
-
-    bot.answer_callback_query(call.id)
-
-    show_recipient(
-        call.message.chat.id,
-        call.message.message_id,
-        call.from_user.id
-    )
-
-
 # =========================================================
 # CUSTOM STARS
 # =========================================================
@@ -637,7 +1145,6 @@ def custom_stars(call):
 
     msg = bot.send_message(
         call.message.chat.id,
-
         "✏️ Напишите количество Stars.\n\n"
         "Минимум — 50 Stars.\n"
         "Цена — "
@@ -879,7 +1386,6 @@ def recipient_other(call):
 
     msg = bot.send_message(
         call.message.chat.id,
-
         "🎁 Напишите @username получателя.\n\n"
         "Например:\n"
         "@username"
@@ -941,7 +1447,11 @@ def back_recipient(call):
 # PAYMENT METHODS
 # =========================================================
 
-def send_payment_details(call, details, method):
+def send_payment_details(
+    call,
+    details,
+    method
+):
 
     user_id = call.from_user.id
     order = orders.get(user_id)
@@ -954,6 +1464,8 @@ def send_payment_details(call, details, method):
         return
 
     order["payment_method"] = method
+    order["payment_status"] = "waiting_receipt"
+
     waiting_receipt.add(user_id)
 
     text = (
@@ -1001,6 +1513,8 @@ def pay_sbp(call):
         SBP_DETAILS,
         "СБП"
     )
+
+
 # =========================================================
 # RECEIPTS
 # =========================================================
@@ -1031,15 +1545,15 @@ def receipt(message):
 
     waiting_receipt.discard(user_id)
 
-    # Сообщение покупателю
     bot.send_message(
         message.chat.id,
         "✅ Чек получен!\n\n"
         "⏳ Ожидайте проверки оплаты администратором."
     )
 
-    # Кнопки админа
-    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup = types.InlineKeyboardMarkup(
+        row_width=2
+    )
 
     markup.add(
         types.InlineKeyboardButton(
@@ -1056,16 +1570,16 @@ def receipt(message):
         "💳 НОВЫЙ ЧЕК\n\n"
         + order_text(order)
         + "\n\n"
-        + "👤 Покупатель: "
+        "👤 Покупатель: "
         + username(message.from_user)
         + "\n"
-        + "🆔 ID: "
+        "🆔 ID: "
         + str(user_id)
         + "\n"
-        + "💳 Способ: "
+        "💳 Способ: "
         + order.get("payment_method", "не указан")
         + "\n"
-        + "📌 Статус: Ожидает проверки"
+        "📌 Статус: Ожидает проверки"
     )
 
     try:
@@ -1076,7 +1590,6 @@ def receipt(message):
             reply_markup=markup
         )
 
-        # Пересылаем сам чек админу
         bot.forward_message(
             ADMIN_ID,
             message.chat.id,
@@ -1139,7 +1652,6 @@ def approve_payment(call):
         "✅ Оплата одобрена"
     )
 
-    # Кнопка "Заказ выполнен"
     markup = types.InlineKeyboardMarkup()
 
     markup.add(
@@ -1153,10 +1665,10 @@ def approve_payment(call):
         "✅ ОПЛАТА ОДОБРЕНА\n\n"
         + order_text(order)
         + "\n\n"
-        + "👤 Покупатель: ID "
+        "👤 Покупатель: ID "
         + str(user_id)
         + "\n\n"
-        + "📦 Теперь выполните заказ."
+        "📦 Теперь выполните заказ."
     )
 
     try:
@@ -1169,13 +1681,13 @@ def approve_payment(call):
         )
 
     except Exception:
+
         bot.send_message(
             ADMIN_ID,
             admin_text,
             reply_markup=markup
         )
 
-    # Сообщение покупателю
     try:
 
         bot.send_message(
@@ -1246,7 +1758,7 @@ def reject_payment(call):
             "❌ ОПЛАТА ОТКЛОНЕНА\n\n"
             + order_text(order)
             + "\n\n"
-            + "👤 Покупатель: ID "
+            "👤 Покупатель: ID "
             + str(user_id),
             call.message.chat.id,
             call.message.message_id
@@ -1322,8 +1834,6 @@ def complete_order(call):
 
     order["completed"] = True
     order["payment_status"] = "completed"
-
-    # Разрешаем покупателю оставить отзыв
     order["can_review"] = True
 
     bot.answer_callback_query(
@@ -1337,7 +1847,7 @@ def complete_order(call):
             "✅ ЗАКАЗ ВЫПОЛНЕН\n\n"
             + order_text(order)
             + "\n\n"
-            + "👤 Покупатель: ID "
+            "👤 Покупатель: ID "
             + str(user_id),
             call.message.chat.id,
             call.message.message_id
@@ -1375,7 +1885,6 @@ def complete_order(call):
 
 # =========================================================
 # ОТЗЫВ
-# Только покупатели с выполненным заказом
 # =========================================================
 
 @bot.callback_query_handler(
@@ -1384,23 +1893,9 @@ def complete_order(call):
 def review(call):
 
     user_id = call.from_user.id
+    order = orders.get(user_id)
 
-    # Проверяем, есть ли выполненный заказ
-    completed_order = None
-
-    for order in orders.values():
-
-        if (
-            order.get("completed") is True
-            and order.get("can_review") is True
-        ):
-            # orders хранится по user_id
-            if orders.get(user_id) is order:
-                completed_order = order
-                break
-
-    if completed_order is None:
-
+    if not order or not order.get("can_review"):
         bot.answer_callback_query(
             call.id,
             "❌ Отзыв доступен только после выполненного заказа.",
@@ -1431,10 +1926,6 @@ def review(call):
 def receive_review(message):
 
     user_id = message.from_user.id
-
-    if user_id not in waiting_review:
-        return
-
     order = orders.get(user_id)
 
     if not order or not order.get("completed"):
@@ -1459,10 +1950,10 @@ def receive_review(message):
 
     admin_review = (
         "⭐ НОВЫЙ ОТЗЫВ\n\n"
-        + "👤 Покупатель: "
+        "👤 Покупатель: "
         + username(message.from_user)
         + "\n"
-        + "🆔 ID: "
+        "🆔 ID: "
         + str(user_id)
         + "\n\n"
         + review_text
@@ -1480,8 +1971,6 @@ def receive_review(message):
             "✅ Спасибо за ваш отзыв! ❤️"
         )
 
-        # Чтобы один заказ нельзя было использовать
-        # для бесконечного количества отзывов
         order["can_review"] = False
 
     except Exception as e:
@@ -1493,7 +1982,7 @@ def receive_review(message):
 
 
 # =========================================================
-# РАССЫЛКА — АДМИН
+# РАССЫЛКА
 # =========================================================
 
 @bot.callback_query_handler(
@@ -1511,20 +2000,17 @@ def broadcast_start(call):
 
     bot.answer_callback_query(call.id)
 
-    broadcast_waiting.add(call.from_user.id)
+    broadcast_waiting.add(
+        call.from_user.id
+    )
 
     bot.send_message(
         call.message.chat.id,
         "📢 РАССЫЛКА\n\n"
-        "Отправьте сообщение, которое нужно разослать всем пользователям.\n\n"
-        "Можно отправить текст, фото или документ.\n\n"
-        "Для отмены отправьте /cancel."
+        "Отправьте сообщение для рассылки.\n\n"
+        "Для отмены: /cancel"
     )
 
-
-# =========================================================
-# ПОЛУЧЕНИЕ РАССЫЛКИ
-# =========================================================
 
 @bot.message_handler(
     func=lambda m: (
@@ -1542,9 +2028,6 @@ def broadcast_send(message):
 
     user_id = message.from_user.id
 
-    if user_id not in broadcast_waiting:
-        return
-
     if message.text == "/cancel":
         broadcast_waiting.discard(user_id)
 
@@ -1559,13 +2042,6 @@ def broadcast_send(message):
     sent = 0
     failed = 0
 
-    bot.send_message(
-        ADMIN_ID,
-        "📢 Начинаю рассылку...\n"
-        "👥 Пользователей: "
-        + str(len(users))
-    )
-
     for target_id in list(users):
 
         try:
@@ -1577,15 +2053,13 @@ def broadcast_send(message):
             )
 
             sent += 1
-
             time.sleep(0.05)
 
         except Exception as e:
 
             failed += 1
-
             print(
-                "Ошибка рассылки пользователю",
+                "Ошибка рассылки:",
                 target_id,
                 e
             )
@@ -1627,17 +2101,12 @@ def prices_menu(call):
     markup.add(
         types.InlineKeyboardButton(
             "⭐ Цена 1 Star",
-            callback_data="price_star"
-        )
-    )
-
-    for amount in prices["stars"]:
+            callbac
+        for amount in prices["stars"]:
 
         markup.add(
             types.InlineKeyboardButton(
-                "⭐ "
-                + amount
-                + " Stars",
+                "⭐ " + amount + " Stars",
                 callback_data="price_stars_" + amount
             )
         )
@@ -1646,9 +2115,7 @@ def prices_menu(call):
 
         markup.add(
             types.InlineKeyboardButton(
-                "💎 Premium "
-                + months
-                + " мес.",
+                "💎 Premium " + months + " мес.",
                 callback_data="price_premium_" + months
             )
         )
@@ -1695,9 +2162,7 @@ def choose_price(call):
 
     if data == "price_star":
 
-        price_waiting[
-            call.from_user.id
-        ] = (
+        price_waiting[call.from_user.id] = (
             "star_price",
             None
         )
@@ -1711,14 +2176,9 @@ def choose_price(call):
 
     elif data.startswith("price_stars_"):
 
-        amount = data.split(
-            "_",
-            2
-        )[2]
+        amount = data.split("_", 2)[2]
 
-        price_waiting[
-            call.from_user.id
-        ] = (
+        price_waiting[call.from_user.id] = (
             "stars",
             amount
         )
@@ -1735,14 +2195,9 @@ def choose_price(call):
 
     else:
 
-        months = data.split(
-            "_",
-            2
-        )[2]
+        months = data.split("_", 2)[2]
 
-        price_waiting[
-            call.from_user.id
-        ] = (
+        price_waiting[call.from_user.id] = (
             "premium",
             months
         )
@@ -1809,9 +2264,7 @@ def set_new_price(message):
         )
         return
 
-    target = price_waiting.pop(
-        user_id
-    )
+    target = price_waiting.pop(user_id)
 
     category, key = target
 
@@ -1862,9 +2315,7 @@ def set_new_price(message):
 # ОТМЕНА
 # =========================================================
 
-@bot.message_handler(
-    commands=["cancel"]
-)
+@bot.message_handler(commands=["cancel"])
 def cancel(message):
 
     user_id = message.from_user.id
