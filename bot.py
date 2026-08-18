@@ -53,6 +53,7 @@ PRICES_FILE = "prices.json"
 USERS_FILE = "users.json"
 PURCHASES_FILE = "purchases.json"
 BLOCKED_FILE = "blocked.json"
+REVIEWS_FILE = "reviews.json"
 
 DEFAULT_TON_RUB_RATE = 125.0
 
@@ -84,6 +85,8 @@ orders = {}
 users = set()
 blocked_users = set()
 purchases = []
+reviews = []
+review_waiting = {}
 
 
 # =========================================================
@@ -144,9 +147,21 @@ def save_purchases():
     save_json(PURCHASES_FILE, purchases)
 
 
+loaded_reviews = load_json(REVIEWS_FILE, [])
+reviews = loaded_reviews if isinstance(loaded_reviews, list) else []
+
+
+def save_reviews():
+    save_json(REVIEWS_FILE, reviews)
+
+
 # =========================================================
 # PRICES
 # =========================================================
+
+def save_prices():
+    save_json(PRICES_FILE, prices)
+
 
 def load_prices():
     data = load_json(PRICES_FILE, {})
@@ -310,6 +325,7 @@ def main_menu(user_id):
         markup.add(types.InlineKeyboardButton("🚫 Блокировка", callback_data="block_menu"))
         markup.add(types.InlineKeyboardButton("💰 Изменить цены", callback_data="prices"))
         markup.add(types.InlineKeyboardButton("📢 Рассылка", callback_data="broadcast"))
+        markup.add(types.InlineKeyboardButton("⭐ Отзывы", callback_data="admin_reviews"))
     return markup
 
 
@@ -827,12 +843,24 @@ def execute_order(call):
         None,
     )
 
+    purchase_index = len(purchases) - 1
+
+    review_markup = types.InlineKeyboardMarkup()
+    review_markup.add(
+        types.InlineKeyboardButton(
+            "⭐ Оставить отзыв",
+            callback_data=f"review_{purchase_index}",
+        )
+    )
+
     try:
         bot.send_message(
             user_id,
             "🎉 ЗАКАЗ ВЫПОЛНЕН!\n\n"
             + order_text(record)
-            + "\n\nСпасибо за покупку ❤️"
+            + "\n\nСпасибо за покупку ❤️\n"
+            "Будем рады вашему отзыву!",
+            reply_markup=review_markup,
         )
     except Exception as e:
         print("Не удалось уведомить пользователя:", e)
@@ -869,6 +897,227 @@ def reject_order(call):
         )
     except Exception as e:
         print("Не удалось уведомить пользователя:", e)
+
+
+
+# =========================================================
+# REVIEWS
+# =========================================================
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("review_"))
+def review_start(call):
+    user_id = call.from_user.id
+
+    try:
+        purchase_index = int(call.data.split("_", 1)[1])
+    except (ValueError, IndexError):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Отзыв не найден",
+            show_alert=True,
+        )
+        return
+
+    if purchase_index < 0 or purchase_index >= len(purchases):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден",
+            show_alert=True,
+        )
+        return
+
+    purchase = purchases[purchase_index]
+
+    if purchase.get("user_id") != user_id:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Это не ваш заказ",
+            show_alert=True,
+        )
+        return
+
+    if purchase.get("review_submitted"):
+        bot.answer_callback_query(
+            call.id,
+            "⭐ Вы уже оставили отзыв",
+            show_alert=True,
+        )
+        return
+
+    markup = types.InlineKeyboardMarkup(row_width=5)
+    markup.row(
+        types.InlineKeyboardButton("1⭐", callback_data=f"reviewrate_{purchase_index}_1"),
+        types.InlineKeyboardButton("2⭐", callback_data=f"reviewrate_{purchase_index}_2"),
+        types.InlineKeyboardButton("3⭐", callback_data=f"reviewrate_{purchase_index}_3"),
+        types.InlineKeyboardButton("4⭐", callback_data=f"reviewrate_{purchase_index}_4"),
+        types.InlineKeyboardButton("5⭐", callback_data=f"reviewrate_{purchase_index}_5"),
+    )
+
+    bot.answer_callback_query(call.id)
+    bot.send_message(
+        call.message.chat.id,
+        "⭐ ОЦЕНИТЕ ЗАКАЗ\n\n"
+        "Выберите оценку от 1 до 5:",
+        reply_markup=markup,
+    )
+
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("reviewrate_"))
+def review_rating(call):
+    user_id = call.from_user.id
+    parts = call.data.split("_")
+
+    if len(parts) != 3:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Некорректная оценка",
+            show_alert=True,
+        )
+        return
+
+    try:
+        purchase_index = int(parts[1])
+        rating = int(parts[2])
+    except ValueError:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Некорректная оценка",
+            show_alert=True,
+        )
+        return
+
+    if rating not in range(1, 6):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Оценка должна быть от 1 до 5",
+            show_alert=True,
+        )
+        return
+
+    if purchase_index < 0 or purchase_index >= len(purchases):
+        bot.answer_callback_query(
+            call.id,
+            "❌ Заказ не найден",
+            show_alert=True,
+        )
+        return
+
+    purchase = purchases[purchase_index]
+
+    if purchase.get("user_id") != user_id:
+        bot.answer_callback_query(
+            call.id,
+            "❌ Это не ваш заказ",
+            show_alert=True,
+        )
+        return
+
+    if purchase.get("review_submitted"):
+        bot.answer_callback_query(
+            call.id,
+            "⭐ Вы уже оставили отзыв",
+            show_alert=True,
+        )
+        return
+
+    review_waiting[user_id] = {
+        "purchase_index": purchase_index,
+        "rating": rating,
+    }
+
+    bot.answer_callback_query(call.id, f"Выбрано: {rating}⭐")
+
+    msg = bot.send_message(
+        call.message.chat.id,
+        f"⭐ Оценка: {rating}/5\n\n"
+        "✍️ Теперь напишите текст отзыва:",
+    )
+    bot.register_next_step_handler(msg, save_user_review)
+
+
+def save_user_review(message):
+    user_id = message.from_user.id
+    state = review_waiting.get(user_id)
+
+    if not state:
+        return
+
+    text = (message.text or "").strip()
+
+    if not text:
+        bot.send_message(
+            message.chat.id,
+            "❌ Отзыв не может быть пустым. Напишите текст отзыва:",
+        )
+        return
+
+    purchase_index = state["purchase_index"]
+    rating = state["rating"]
+
+    if purchase_index < 0 or purchase_index >= len(purchases):
+        review_waiting.pop(user_id, None)
+        bot.send_message(message.chat.id, "❌ Заказ не найден.")
+        return
+
+    purchase = purchases[purchase_index]
+
+    if purchase.get("user_id") != user_id:
+        review_waiting.pop(user_id, None)
+        bot.send_message(message.chat.id, "❌ Этот заказ вам не принадлежит.")
+        return
+
+    if purchase.get("review_submitted"):
+        review_waiting.pop(user_id, None)
+        bot.send_message(message.chat.id, "⭐ Вы уже оставили отзыв.")
+        return
+
+    purchase["review_submitted"] = True
+    purchase["review_rating"] = rating
+    purchase["review_text"] = text
+    purchase["reviewed_at"] = int(time.time())
+
+    review = {
+        "user_id": user_id,
+        "username": username(message.from_user),
+        "rating": rating,
+        "text": text,
+        "purchase_index": purchase_index,
+        "product": purchase.get("product"),
+        "stars": purchase.get("stars"),
+        "months": purchase.get("months"),
+        "created_at": int(time.time()),
+    }
+
+    reviews.append(review)
+    save_purchases()
+    save_reviews()
+    review_waiting.pop(user_id, None)
+
+    bot.send_message(
+        message.chat.id,
+        "❤️ Спасибо за отзыв!\n\n"
+        f"⭐ Ваша оценка: {rating}/5\n"
+        "Ваш отзыв сохранён.",
+    )
+
+    if purchase.get("product") == "Stars":
+        product_text = f"⭐ {purchase.get('stars', 0)} Stars"
+    else:
+        product_text = f"💎 Premium {purchase.get('months', 0)} мес."
+
+    admin_text = (
+        "⭐ НОВЫЙ ОТЗЫВ\n\n"
+        f"👤 Клиент: {username(message.from_user)}\n"
+        f"🆔 ID: {user_id}\n"
+        f"📦 Товар: {product_text}\n"
+        f"⭐ Оценка: {rating}/5\n\n"
+        f"💬 Отзыв:\n{text}"
+    )
+
+    try:
+        bot.send_message(ADMIN_ID, admin_text)
+    except Exception as e:
+        print("Не удалось отправить отзыв админу:", e)
 
 
 # =========================================================
@@ -1004,9 +1253,9 @@ def prices_menu(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(types.InlineKeyboardButton("⭐ Изменить цену 1 Star", callback_data="price_star"))
     for amount in prices["stars"]:
-        markup.add(types.InlineKeyboardButton(f"⭐ Пакет {amount}", callback_data="price_stars_{amount}"))
+        markup.add(types.InlineKeyboardButton(f"⭐ Пакет {amount}", callback_data=f"price_stars_{amount}"))
     for months in prices["premium"]:
-        markup.add(types.InlineKeyboardButton(f"💎 Premium {months} мес.", callback_data="price_premium_{months}"))
+        markup.add(types.InlineKeyboardButton(f"💎 Premium {months} мес.", callback_data=f"price_premium_{months}"))
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="home"))
     bot.send_message(call.message.chat.id, "💰 ИЗМЕНЕНИЕ ЦЕН", reply_markup=markup)
 
@@ -1095,6 +1344,57 @@ def purchase_history(call):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="home"))
     bot.send_message(call.message.chat.id, text, reply_markup=markup)
+
+
+
+# =========================================================
+# ADMIN: REVIEWS
+# =========================================================
+
+@bot.callback_query_handler(func=lambda c: c.data == "admin_reviews")
+def admin_reviews(call):
+    if not is_admin(call.from_user.id):
+        bot.answer_callback_query(
+            call.id,
+            "Нет доступа",
+            show_alert=True,
+        )
+        return
+
+    bot.answer_callback_query(call.id)
+
+    if not reviews:
+        text = "⭐ Отзывов пока нет."
+    else:
+        lines = ["⭐ ПОСЛЕДНИЕ ОТЗЫВЫ\n"]
+
+        for item in reversed(reviews[-20:]):
+            if item.get("product") == "Stars":
+                product = f"⭐ {item.get('stars', 0)} Stars"
+            else:
+                product = f"💎 Premium {item.get('months', 0)} мес."
+
+            lines.append(
+                f"{item.get('rating', 0)}/5 ⭐ | "
+                f"{item.get('username', '—')} | {product}\n"
+                f"💬 {item.get('text', '')}\n"
+            )
+
+        text = "\n".join(lines)
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(
+            "⬅️ Назад",
+            callback_data="home",
+        )
+    )
+
+    bot.send_message(
+        call.message.chat.id,
+        text,
+        reply_markup=markup,
+    )
 
 
 # =========================================================
