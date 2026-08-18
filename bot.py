@@ -2074,7 +2074,6 @@ def broadcast_send(message):
         + str(failed)
     )
 
-
 # =========================================================
 # ИЗМЕНЕНИЕ ЦЕН
 # =========================================================
@@ -2101,12 +2100,19 @@ def prices_menu(call):
     markup.add(
         types.InlineKeyboardButton(
             "⭐ Цена 1 Star",
-            callbac
-        for amount in prices["stars"]:
+            callback_data="price_star"
+        )
+    )
+
+    for amount in prices["stars"]:
 
         markup.add(
             types.InlineKeyboardButton(
-                "⭐ " + amount + " Stars",
+                "⭐ "
+                + amount
+                + " Stars — "
+                + money(prices["stars"][amount])
+                + " ₽",
                 callback_data="price_stars_" + amount
             )
         )
@@ -2115,7 +2121,11 @@ def prices_menu(call):
 
         markup.add(
             types.InlineKeyboardButton(
-                "💎 Premium " + months + " мес.",
+                "💎 Premium "
+                + months
+                + " мес. — "
+                + money(prices["premium"][months])
+                + " ₽",
                 callback_data="price_premium_" + months
             )
         )
@@ -2130,9 +2140,9 @@ def prices_menu(call):
     bot.send_message(
         call.message.chat.id,
         "💰 ИЗМЕНЕНИЕ ЦЕН\n\n"
-        "Выберите цену:",
+        "Выберите цену, которую хотите изменить:",
         reply_markup=markup
-    )
+            )
 
 
 # =========================================================
