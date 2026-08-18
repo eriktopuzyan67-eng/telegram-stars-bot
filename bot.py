@@ -417,7 +417,7 @@ def stars(call):
     text = (
         "⭐ ВЫБЕРИТЕ STARS\n\n"
         "💳 На данный момент доступны оплаты TON и рублями\n"
-        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
+        "🌍 Скоро будет доступна оплата в разных валютах\n\n"
         f"💱 Курс: 1 TON = {money(TON_RUB_RATE)} ₽"
     )
     if not safe_edit(call.message.chat.id, call.message.message_id, text, markup):
@@ -491,7 +491,7 @@ def premium(call):
     text = (
         "💎 TELEGRAM PREMIUM\n\n"
         "💳 На данный момент доступны оплаты TON и рублями\n"
-        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
+        "🌍 Скоро будет доступна оплата в разных валютах\n\n"
         f"💱 Курс: 1 TON = {money(TON_RUB_RATE)} ₽"
     )
     if not safe_edit(call.message.chat.id, call.message.message_id, text, markup):
@@ -758,8 +758,8 @@ def paid_order(call):
         )
         bot.send_message(
             call.message.chat.id,
-            "⏳ Оплата отправлена на проверку администратору.\n\n"
-            "После проверки заказ будет одобрен, а затем выполнен.",
+            "⏳ Оплата отправлена администратору.\n\n"
+            "Ожидайте ответа в течение 15 минут.",
         )
     except Exception as e:
         print("Ошибка уведомления админа:", e)
@@ -794,14 +794,19 @@ def approve_order(call):
     markup.add(types.InlineKeyboardButton("📦 Выполнить заказ", callback_data=f"execute_{user_id}"))
     markup.add(types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user_id}"))
 
-    new_text = admin_order_text(order, call.from_user) + "\n\n✅ ОПЛАТА ОДОБРЕНА"
+    new_text = (
+        admin_order_text(order, call.from_user)
+        .replace("📌 Статус: ожидает проверки", "📌 Статус: оплата одобрена")
+        + "\n\n✅ ОПЛАТА ОДОБРЕНА"
+    )
     safe_edit(call.message.chat.id, call.message.message_id, new_text, markup)
 
     try:
         bot.send_message(
             user_id,
-            "✅ Оплата одобрена администратором.\n\n"
-            "📦 Заказ готовится к выполнению."
+            "✅ Оплата одобрена!\n\n"
+            "📦 Заказ принят в обработку.\n"
+            "⏳ Ожидайте выполнения заказа."
         )
     except Exception as e:
         print("Не удалось уведомить пользователя:", e)
@@ -838,7 +843,9 @@ def execute_order(call):
     safe_edit(
         call.message.chat.id,
         call.message.message_id,
-        admin_order_text(record, call.from_user) + "\n\n📦 ЗАКАЗ ВЫПОЛНЕН",
+        admin_order_text(record, call.from_user)
+        .replace("📌 Статус: ожидает проверки", "📌 Статус: выполнен")
+        + "\n\n📦 ЗАКАЗ ВЫПОЛНЕН\n\n✅ Вы успешно выполнили заказ!",
         None,
     )
 
@@ -857,8 +864,7 @@ def execute_order(call):
             user_id,
             "🎉 ЗАКАЗ ВЫПОЛНЕН!\n\n"
             + order_text(record)
-            + "\n\nСпасибо за покупку ❤️\n"
-            "Будем рады вашему отзыву!",
+            + "\n\n⭐ Оставьте отзыв о заказе — нам важно ваше мнение!",
             reply_markup=review_markup,
         )
     except Exception as e:
