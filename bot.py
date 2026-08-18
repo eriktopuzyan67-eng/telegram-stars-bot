@@ -417,7 +417,7 @@ def stars(call):
     text = (
         "⭐ ВЫБЕРИТЕ STARS\n\n"
         "💳 На данный момент доступны оплаты TON и рублями\n"
-        "📱 В скором времени будут доступны различные валюты для оплаты\n\n"
+        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
         f"💱 Курс: 1 TON = {money(TON_RUB_RATE)} ₽"
     )
     if not safe_edit(call.message.chat.id, call.message.message_id, text, markup):
@@ -491,7 +491,7 @@ def premium(call):
     text = (
         "💎 TELEGRAM PREMIUM\n\n"
         "💳 На данный момент доступны оплаты TON и рублями\n"
-        "📱 В скором времени будут доступны различные валюты для оплаты\n\n"
+        "🇺🇦 В скором времени будет доступна оплата в гривнах\n\n"
         f"💱 Курс: 1 TON = {money(TON_RUB_RATE)} ₽"
     )
     if not safe_edit(call.message.chat.id, call.message.message_id, text, markup):
@@ -718,7 +718,6 @@ def admin_order_text(order, user):
     text = (
         "🧾 НОВАЯ ОПЛАТА\n\n"
         + order_text(order)
-        + "\n👤 Клиент: " + uname
         + f"\n🆔 ID: {order.get('user_id', '—')}"
         + "\n💳 Способ: " + method
         + "\n📌 Статус: ожидает проверки"
@@ -1107,7 +1106,6 @@ def save_user_review(message):
 
     admin_text = (
         "⭐ НОВЫЙ ОТЗЫВ\n\n"
-        f"👤 Клиент: {username(message.from_user)}\n"
         f"🆔 ID: {user_id}\n"
         f"📦 Товар: {product_text}\n"
         f"⭐ Оценка: {rating}/5\n\n"
