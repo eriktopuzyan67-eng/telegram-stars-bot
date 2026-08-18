@@ -25,9 +25,41 @@ class Handler(BaseHTTPRequestHandler):
             b"SELL STARS RT is running"
         )
 
+    def do_POST(self):
+        if self.path != "/yoomoney":
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        length = int(
+            self.headers.get("Content-Length", 0)
+        )
+
+        body = self.rfile.read(
+            length
+        ).decode("utf-8")
+
+        from urllib.parse import parse_qs
+
+        data = {
+            key: values[0]
+            for key, values in parse_qs(
+                body,
+                keep_blank_values=True
+            ).items()
+        }
+
+        print(
+            "YooMoney notification:",
+            data
+        )
+
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
     def log_message(self, format, *args):
         pass
-
 
 def run_server():
     port = int(os.environ.get("PORT", "10000"))
